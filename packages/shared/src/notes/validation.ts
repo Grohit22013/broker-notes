@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { parseIsoDate } from "@/lib/dates";
+import { parseIsoDate } from "../dates";
 
 import { isDocJson, type DocJson } from "./content";
 import { AMENDMENT_MAX } from "./finalise";
@@ -8,11 +8,9 @@ import { keyFiguresSchema } from "./key-figures";
 import { normalizeTags } from "./tags";
 import { LOAN_STAGE_VALUES, NOTE_TYPE_VALUES } from "./taxonomy";
 
-export const TITLE_MAX = 200;
-/** Plain-text cap (~20k words) — far beyond any real file note. */
-export const CONTENT_TEXT_MAX = 100_000;
-/** Serialized JSON cap, protects the DB and server from oversized payloads. */
-export const CONTENT_JSON_MAX_BYTES = 512 * 1024;
+import { CONTENT_JSON_MAX_BYTES, CONTENT_TEXT_MAX, TITLE_MAX } from "./limits";
+
+export { CONTENT_JSON_MAX_BYTES, CONTENT_TEXT_MAX, TITLE_MAX };
 
 export const noteIdSchema = z.cuid({ error: "Invalid note id" });
 

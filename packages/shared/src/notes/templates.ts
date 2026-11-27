@@ -1,4 +1,4 @@
-import type { JSONContent } from "@tiptap/react";
+import type { JSONContent } from "./json-content";
 
 import { EMPTY_DOC, type DocJson } from "./content";
 import type { NoteTypeValue } from "./taxonomy";

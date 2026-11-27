@@ -80,6 +80,10 @@ describe("csv", () => {
     expect(csvFilename("notes", new Date("2026-11-28T03:00:00Z"))).toBe(
       "brokernotes-notes-2026-11-28.csv",
     );
+    // 6pm UTC on the 27th is already the 28th in Sydney.
+    expect(csvFilename("notes", new Date("2026-11-27T18:00:00Z"))).toBe(
+      "brokernotes-notes-2026-11-28.csv",
+    );
   });
 });
 

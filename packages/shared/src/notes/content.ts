@@ -1,4 +1,4 @@
-import type { JSONContent } from "@tiptap/react";
+import type { JSONContent } from "./json-content";
 
 /** A Tiptap/ProseMirror JSON document (root node is always `doc`). Type-only import: no runtime cost. */
 export type DocJson = JSONContent & { type: "doc" };

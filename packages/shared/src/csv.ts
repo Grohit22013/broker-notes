@@ -6,6 +6,8 @@
  * cells with a single quote so they're shown as text (OWASP "CSV Injection" guidance).
  */
 
+import { toIsoDate } from "./dates";
+
 const FORMULA_TRIGGERS = /^[=+\-@\t\r]/;
 
 /** A UTF-8 byte-order mark so Excel detects UTF-8 (names like "Nguyễn", "O’Brien"). */
@@ -27,7 +29,7 @@ export function toCsv(headers: readonly string[], rows: readonly CsvValue[][]): 
   return UTF8_BOM + lines.join("\r\n") + "\r\n";
 }
 
-/** Safe file name like `brokernotes-notes-2026-11-28.csv`. */
+/** Safe file name like `brokernotes-notes-2026-11-28.csv` — dated by the broker's (Sydney) calendar, not UTC. */
 export function csvFilename(kind: string, date: Date = new Date()): string {
-  return `brokernotes-${kind}-${date.toISOString().slice(0, 10)}.csv`;
+  return `brokernotes-${kind}-${toIsoDate(date)}.csv`;
 }
