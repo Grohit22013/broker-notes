@@ -21,13 +21,19 @@ export function parseKeyFigures(value: unknown): KeyFigures {
   return r.success ? clean(r.data) : {};
 }
 
-/** Removes null/empty entries so stored JSON stays small and "is anything set?" is easy. */
+/**
+ * Removes null/empty entries so stored JSON stays small and "is anything set?" is easy.
+ * Copies only an explicit allow-list of fields — never keys taken from the input object —
+ * so a payload can't smuggle in properties like `__proto__` (CodeQL js/remote-property-injection).
+ */
 export function clean(f: KeyFigures): KeyFigures {
   const out: KeyFigures = {};
-  for (const [k, v] of Object.entries(f) as [keyof KeyFigures, unknown][]) {
-    if (v === null || v === undefined || v === "") continue;
-    (out as Record<string, unknown>)[k] = v;
-  }
+  const present = <T>(v: T | null | undefined): v is T => v !== null && v !== undefined && v !== "";
+  if (present(f.loanAmount)) out.loanAmount = f.loanAmount;
+  if (present(f.propertyValue)) out.propertyValue = f.propertyValue;
+  if (present(f.income)) out.income = f.income;
+  if (present(f.rate)) out.rate = f.rate;
+  if (present(f.lender)) out.lender = f.lender;
   return out;
 }
 

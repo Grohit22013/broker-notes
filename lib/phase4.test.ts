@@ -5,7 +5,7 @@ import { csvCell, csvFilename, toCsv, UTF8_BOM } from "./csv";
 import { computeLvr, formatAud, formatAudCompact, parseMoney, parseRate } from "./money";
 import { isDocJson } from "./notes/content";
 import { canEditContent, lockedFieldIn } from "./notes/finalise";
-import { hasKeyFigures, lvrOf, parseKeyFigures } from "./notes/key-figures";
+import { clean, hasKeyFigures, lvrOf, parseKeyFigures } from "./notes/key-figures";
 import { TEMPLATES, getTemplate, noteFromTemplate } from "./notes/templates";
 
 describe("money", () => {
@@ -155,5 +155,17 @@ describe("templates", () => {
     const json = JSON.stringify(getTemplate("lender-rationale")!.build());
     expect(json).toContain("best interests");
     expect(json).toContain("Why other options were not recommended");
+  });
+});
+
+describe("key figures hardening", () => {
+  it("never copies unexpected keys (e.g. __proto__) from input", () => {
+    const hostile = JSON.parse(
+      '{"loanAmount": 500000, "__proto__": {"polluted": true}, "extra": 1}',
+    );
+    const out = clean(hostile);
+    expect(out).toEqual({ loanAmount: 500000 });
+    expect(Object.getPrototypeOf(out)).toBe(Object.prototype);
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
   });
 });
