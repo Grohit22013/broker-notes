@@ -1,13 +1,14 @@
 version: 2
 updates:
-  # npm packages — weekly, grouped so we get a couple of PRs, not dozens.
+  # npm packages — weekly, minor/patch only, grouped into at most two PRs.
+  # Major upgrades are deliberate decisions (planned + tested), not bot PRs.
   - package-ecosystem: npm
     directory: /
     schedule:
       interval: weekly
       day: monday
       timezone: Australia/Sydney
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
     labels: [dependencies]
     commit-message:
       prefix: "chore(deps)"
@@ -19,21 +20,18 @@ updates:
         dependency-type: production
         update-types: [minor, patch]
     ignore:
-      # Major framework upgrades are deliberate decisions, not bot PRs.
-      - dependency-name: next
-        update-types: ["version-update:semver-major"]
-      - dependency-name: eslint-config-next
-        update-types: ["version-update:semver-major"]
-      - dependency-name: prisma
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "@prisma/client"
+      - dependency-name: "*"
         update-types: ["version-update:semver-major"]
 
-  # GitHub Actions versions — monthly.
+  # GitHub Actions — monthly, all bumps in ONE grouped PR.
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: monthly
+    open-pull-requests-limit: 1
     labels: [dependencies, "area: ci"]
     commit-message:
       prefix: "chore(ci)"
+    groups:
+      github-actions:
+        patterns: ["*"]
