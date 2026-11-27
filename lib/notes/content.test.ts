@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { EMPTY_DOC, UNTITLED, displayTitle, isDocJson, snippet, toPlainDoc } from "./content";
+import {
+  EMPTY_DOC,
+  UNTITLED,
+  displayTitle,
+  isDocJson,
+  matchSnippet,
+  snippet,
+  toPlainDoc,
+} from "./content";
 
 describe("isDocJson", () => {
   it("accepts Tiptap documents", () => {
@@ -28,8 +36,10 @@ describe("displayTitle", () => {
 });
 
 describe("snippet", () => {
-  it("collapses whitespace and newlines", () => {
-    expect(snippet("Client  wants\n\n a 30-year   loan")).toBe("Client wants a 30-year loan");
+  it("collapses whitespace and separates blocks (headings, list items) with a middle dot", () => {
+    expect(snippet("Goals\n\n Client  wants a 30-year   loan")).toBe(
+      "Goals · Client wants a 30-year loan",
+    );
   });
 
   it("returns short text unchanged", () => {
@@ -58,5 +68,31 @@ describe("toPlainDoc", () => {
       type: "doc",
       content: [{ type: "taskItem", attrs: { checked: true } }],
     });
+  });
+});
+
+describe("matchSnippet", () => {
+  const text = "Discussed refinance options with ANZ and CBA, including offset accounts and fees.";
+
+  it("finds a case-insensitive match and keeps the original casing", () => {
+    expect(matchSnippet(text, "anz", 200)).toEqual({
+      before: "Discussed refinance options with ",
+      match: "ANZ",
+      after: " and CBA, including offset accounts and fees.",
+    });
+  });
+
+  it("centres long text around the match with ellipses", () => {
+    const long = `${"lorem ".repeat(60)}OFFSET${" ipsum".repeat(60)}`;
+    const s = matchSnippet(long, "offset", 60)!;
+    expect(s.match).toBe("OFFSET");
+    expect(s.before.startsWith("…")).toBe(true);
+    expect(s.after.endsWith("…")).toBe(true);
+    expect((s.before + s.match + s.after).length).toBeLessThanOrEqual(62);
+  });
+
+  it("returns null for no match or an empty query", () => {
+    expect(matchSnippet(text, "westpac")).toBeNull();
+    expect(matchSnippet(text, "  ")).toBeNull();
   });
 });

@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import { EMPTY_DOC } from "./content";
-import { CONTENT_TEXT_MAX, TITLE_MAX, noteIdSchema, updateNoteSchema } from "./validation";
+import {
+  CONTENT_TEXT_MAX,
+  TITLE_MAX,
+  noteIdSchema,
+  updateNoteMetaSchema,
+  updateNoteSchema,
+} from "./validation";
 
 const id = "cmwzdoxp20000e9249ao6x6jh";
 const valid = { id, title: "Discovery call", contentJson: EMPTY_DOC, contentText: "" };
@@ -43,5 +49,24 @@ describe("updateNoteSchema", () => {
     const r = updateNoteSchema.safeParse({ ...valid, contentJson: big });
     expect(r.success).toBe(false);
     if (!r.success) expect(r.error.issues[0]?.message).toBe("This note is too large to save");
+  });
+});
+
+describe("updateNoteMetaSchema", () => {
+  it("accepts a partial update and normalises tags", () => {
+    const r = updateNoteMetaSchema.parse({ id, tags: ["Refinance", "refinance", " SMSF "] });
+    expect(r.tags).toEqual(["Refinance", "SMSF"]);
+    expect(r.noteType).toBeUndefined();
+  });
+
+  it("allows clearing stage and follow-up with null", () => {
+    const r = updateNoteMetaSchema.parse({ id, loanStage: null, followUpDate: null });
+    expect(r.loanStage).toBeNull();
+    expect(r.followUpDate).toBeNull();
+  });
+
+  it("rejects unknown enums and impossible dates", () => {
+    expect(updateNoteMetaSchema.safeParse({ id, loanStage: "MAYBE" }).success).toBe(false);
+    expect(updateNoteMetaSchema.safeParse({ id, followUpDate: "2026-02-30" }).success).toBe(false);
   });
 });
