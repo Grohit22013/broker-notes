@@ -24,7 +24,26 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  notes   Note[]
+  clients Client[]
+}
+
+/// A broker's client (borrower / household). Notes can be linked to one client.
+model Client {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  /// Stored lower-cased; unique per broker when present (used to de-duplicate CSV imports).
+  email     String?
+  phone     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   notes Note[]
+
+  @@unique([userId, email])
+  @@index([userId, name])
 }
 
 /// A broker's file note. Rich text is stored as Tiptap JSON; plain text is kept for search/snippets.
@@ -46,15 +65,40 @@ model Note {
   /// When the broker needs to follow up (call back, chase documents, review).
   followUpAt  DateTime?
   pinned      Boolean    @default(false)
+  clientId    String?
+  client      Client?    @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  /// Key loan figures (loan amount, property value, income, rate, lender) — validated by Zod.
+  keyFigures  Json?
+  /// DRAFT notes are editable; FINALISED notes are locked and only accept amendments.
+  status      NoteStatus @default(DRAFT)
+  finalisedAt DateTime?
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
   /// Soft delete — file notes are compliance records, so we never hard-delete.
   deletedAt   DateTime?
 
-  versions NoteVersion[]
+  versions   NoteVersion[]
+  amendments NoteAmendment[]
 
   @@index([userId, deletedAt, updatedAt(sort: Desc)])
   @@index([userId, followUpAt])
+  @@index([clientId])
+}
+
+enum NoteStatus {
+  DRAFT
+  FINALISED
+}
+
+/// Append-only addition to a finalised note (RG 273: records are amended, never silently rewritten).
+model NoteAmendment {
+  id        String   @id @default(cuid())
+  noteId    String
+  note      Note     @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  body      String
+  createdAt DateTime @default(now())
+
+  @@index([noteId, createdAt])
 }
 
 enum NoteType {
