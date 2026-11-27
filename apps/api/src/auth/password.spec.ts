@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
-
 import { hashPassword, verifyPassword } from "./password";
+
+jest.setTimeout(20_000);
 
 describe("password hashing", () => {
   it("produces a bcrypt hash that is not the plain password", async () => {
@@ -18,4 +18,4 @@ describe("password hashing", () => {
   it("returns false (without throwing) when there is no user hash", async () => {
     await expect(verifyPassword("anything1", null)).resolves.toBe(false);
   });
-}, 20_000);
+});
