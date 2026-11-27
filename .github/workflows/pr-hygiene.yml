@@ -58,7 +58,7 @@ jobs:
         with:
           sync-labels: false
       - name: Size label
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const pr = context.payload.pull_request;
