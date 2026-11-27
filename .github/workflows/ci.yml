@@ -6,7 +6,8 @@
 #   typecheck ┼──► ✅ CI passed  (single required status check)
 #   unit-tests ┤
 #   database ┤
-#   build ─┘
+#   build ┤
+#   e2e ─┘   (Playwright, desktop + mobile, real Postgres)
 #
 # Every check is its own job so a PR shows exactly what failed, and the jobs
 # run in parallel. Each job writes a short report to the run's Summary page.
@@ -233,11 +234,84 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+  # ── 🎭 Playwright end-to-end (desktop + mobile) against real Postgres ──────
+  e2e:
+    name: 🎭 E2E (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: brokernotes_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - name: Apply migrations
+        run: npx prisma migrate deploy
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - name: Install Chromium
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+      - name: Install Chromium system deps (cache hit)
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+      - name: Build
+        run: npm run build
+      - name: Run E2E tests
+        run: npx playwright test
+      - name: E2E summary
+        if: always()
+        run: |
+          node <<'EOF' >> "$GITHUB_STEP_SUMMARY"
+          const fs = require("fs");
+          if (!fs.existsSync("reports/e2e.json")) { console.log("### 🎭 E2E — ⚠️ no report produced"); process.exit(0); }
+          const r = JSON.parse(fs.readFileSync("reports/e2e.json", "utf8"));
+          const rows = [];
+          const walk = (suite, path = []) => {
+            for (const s of suite.suites ?? []) walk(s, s.title && !s.title.endsWith(".ts") ? [...path, s.title] : path);
+            for (const spec of suite.specs ?? []) for (const t of spec.tests) {
+              const res = t.results.at(-1);
+              const icon = { expected: "✅", flaky: "⚠️", unexpected: "❌", skipped: "⏭️" }[t.status] ?? t.status;
+              rows.push(`| ${icon} | ${t.projectName} | ${[...path, spec.title].join(" › ")} | ${((res?.duration ?? 0) / 1000).toFixed(1)}s |`);
+            }
+          };
+          walk(r);
+          const st = r.stats;
+          const icon = st.unexpected ? "❌" : st.flaky ? "⚠️" : "✅";
+          console.log(`### 🎭 E2E — ${icon} ${st.expected} passed, ${st.unexpected} failed, ${st.flaky} flaky (${(st.duration / 1000).toFixed(1)}s)\n`);
+          console.log("| | Viewport | Test | Time |\n|---|---|---|---|\n" + rows.join("\n"));
+          EOF
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
   # ── ✅ Single gate for branch protection ───────────────────────────────────
   ci-passed:
     name: ✅ CI passed
     if: always()
-    needs: [lint, format, typecheck, unit-tests, database, build]
+    needs: [lint, format, typecheck, unit-tests, database, build, e2e]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

@@ -15,7 +15,7 @@ The working log for the build. It's updated in every PR and records progress, de
   - [x] Prisma 6 schema, database client singleton, `.env.example`
   - [x] GitHub Actions CI and PR template
   - [x] Neon database connected (`prisma db push`)
-- [ ] **Phase 1: Authentication** (`phase-1/auth`, tracking issue #3)
+- [x] **Phase 1: Authentication** (`phase-1/auth`, PR #10, merged)
   - [x] Upgraded CI: 6 parallel jobs plus a "CI passed" gate, security workflow (dependency review, npm audit, CodeQL), PR hygiene (title check, auto labels), Dependabot
   - [x] `User` model and first migration (`add_user`)
   - [x] Auth.js v5 Credentials login with bcrypt (cost 12) and a 7-day JWT session
@@ -23,7 +23,16 @@ The working log for the build. It's updated in every PR and records progress, de
   - [x] Middleware guards `/notes` and `/clients`; `getCurrentUser()` / `requireUser()` helpers
   - [x] User menu with sign-out; bottom nav only shown when signed in
   - [x] 41 unit tests (80% coverage on `lib/`), plus a manual end-to-end check against Neon
-- [ ] Phase 2: Notes core with Tiptap
+- [ ] **Phase 2: Notes core with Tiptap** (`phase-2/notes-editor`, tracking issue #4)
+  - [x] `Note` and `NoteVersion` models and migration (`add_notes`). Soft delete; indexed by owner and updated date.
+  - [x] Notes data layer: every query is scoped by `userId`, and ids are validated as cuids
+  - [x] Server actions: create, autosave (validated with Zod and size-capped), soft delete
+  - [x] Tiptap 3 editor: headings, bold/italic/underline/strike, highlight, bullet/numbered lists, checklists, links, tables, quote, undo/redo, Markdown shortcuts, word count
+  - [x] Mobile toolbar: sticky, scrolls sideways with an edge fade, 44px tap targets
+  - [x] Autosave: 1.5s debounce with a **5s max wait**, no overlapping saves, **saves when the app is backgrounded** (visibilitychange/pagehide), Ctrl+S, retry, unsaved-changes warning
+  - [x] Version snapshots, throttled to at most 1 per 5 minutes while editing
+  - [x] Notes list: cards with snippets and relative AU dates, empty state, skeletons, delete with confirmation
+  - [x] 74 unit tests, plus 8 Playwright E2E tests (desktop and mobile), plus an E2E job in CI
 - [ ] Phase 3: Notes list, search and filters
 - [ ] Phase 4: Broker features, plus CSV import and export
 - [ ] Phase 5: AI via OpenRouter
@@ -49,6 +58,14 @@ The working log for the build. It's updated in every PR and records progress, de
 | 2026-11-28 | Constant-time login (compare against a dummy hash when the user doesn't exist), one generic error message | Stops attackers from finding out which emails are registered.                                                                                                                                                    |
 | 2026-11-28 | Same-site-only post-login redirects (`safeRedirect`); the middleware builds a relative `callbackUrl`      | Prevents open redirects. Also fixes a bug found in the end-to-end check, where Auth.js's absolute callbackUrl was rejected and the broker landed on /notes instead of the page they asked for.                   |
 | 2026-11-28 | Zod kept out of client bundles (password limits live in `lib/auth/constants.ts`)                          | The /register page JavaScript dropped from 27.3 kB to 2.9 kB.                                                                                                                                                    |
+| 2026-11-28 | **Tiptap 3.34.0**, not v2 or the newest 3.35.1                                                            | v3 is the current major version (StarterKit includes Link and Underline; TableKit). Pinned to the newest release that's at least 2 weeks old, for stability.                                                     |
+| 2026-11-28 | Store the document as Tiptap JSON, plus a plain-text copy                                                 | JSON keeps the formatting exact. The plain text gives fast search and list snippets without parsing JSON.                                                                                                        |
+| 2026-11-28 | Soft delete (`deletedAt`)                                                                                 | File notes are compliance records (ASIC RG 273). Deleting hides a note but keeps the record.                                                                                                                     |
+| 2026-11-28 | Version snapshots throttled to 1 per 5 minutes                                                            | Autosave fires every ~1.5s, so a snapshot per save would flood the history. One every 5 minutes is a useful audit trail at a fraction of the rows.                                                               |
+| 2026-11-28 | Autosave **max wait** plus **save when the page is hidden**                                               | Found with screenshots: a plain debounce never fires while someone types steadily, so switching apps on a phone could lose work.                                                                                 |
+| 2026-11-28 | Send a plain JSON copy of the doc (`toPlainDoc`) to the server action                                     | ProseMirror uses null-prototype `attrs`, which React's server-action serializer sends as unreadable "temporary references". Formatted notes failed to save until this was fixed (found by E2E).                  |
+| 2026-11-28 | Playwright E2E on desktop and **mobile (Pixel 7)**, against real Postgres in CI                           | Proves the core flow and cross-user isolation on both form factors. Browsers live on D: locally because C: is short on space.                                                                                    |
+| 2026-11-28 | Keep shadcn's official `cn` package                                                                       | I briefly removed it, mistaking it for an unrelated package. It's published by shadcn (`shadcn-ui/cn`), so it was restored, and components import it through `@/lib/utils` so there's one place to change it.    |
 | 2026-11-28 | `next build` without `--turbopack`                                                                        | The webpack production build is the more proven option for deployment.                                                                                                                                           |
 
 ---
@@ -59,6 +76,9 @@ The working log for the build. It's updated in every PR and records progress, de
 - The dev machine's C: drive ran out of space during setup. Clearing the npm cache freed about 1.8 GB. Consider `npm config set cache D:\npm-cache`.
 - `/notes/new` shows a 404 until Phase 2.
 - **Rotate the Neon DB password before deploying.** The current connection string was shared in the AI chat.
+- `npm audit` lists high-severity advisories in `effect` and `deepmerge-ts`, which come from the **Prisma CLI's** config loader (`prisma` → `@prisma/config`). That's dev and migration tooling only, never in the runtime bundle. Waiting for a patched Prisma 6 release, which Dependabot will raise.
+- The editor page loads 179 kB of JavaScript (Tiptap and ProseMirror). That's acceptable for the main editing screen; the toolbar could be lazy-loaded later if needed.
+- No version-history UI yet. Snapshots are already recorded; the history drawer arrives in Phase 4.
 - There's no login rate limiting yet. Serverless needs a shared store (for example Upstash) for that, so it's a candidate for Phase 6.
 - No "forgot password" or email verification; there's no email provider, which is out of scope for the assignment.
 
@@ -68,11 +88,12 @@ The working log for the build. It's updated in every PR and records progress, de
 
 The app is built with Claude Code (Claude Opus 5.5) as a pair programmer. The human sets direction and reviews every PR. The AI researches, plans and writes code.
 
-| Phase    | Prompt or intent                                                                                         | What the AI did                                                                                                                                                                                                |
-| -------- | -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Planning | "Research mortgage broker features, plus Stephan Ventures and Finobi, using separate agents"             | Ran 3 parallel research agents (broker workflow and compliance, Stephen Ventures / Carisma, Finobi), then combined their findings into the Australian-broker, compliance-first product direction.              |
-| Planning | "Break this phase by phase, use the GitHub PR workflow, OpenRouter, keep it mobile friendly, handle CSV" | Wrote the phased plan with "done when" criteria, the branch and PR workflow, the code-quality setup, the mobile-first layout rules, and the CSV import/export design (including formula-injection protection). |
-| 0        | "Start Phase 0"                                                                                          | Scaffolded the app and set up the tooling, theme, app shell, Prisma and CI. Kept `main` limited to the README so the scaffold could be reviewed in a PR.                                                       |
-| 1        | "The CI pipeline looks basic, make it more accurate"                                                     | Redesigned CI as parallel, single-purpose jobs, each writing a summary (test counts, coverage table, migration drift, bundle sizes). Added security scanning, PR hygiene and Dependabot.                       |
-| 1        | "Show Phase 0 and Phase 1 explicitly on GitHub"                                                          | Created a milestone, tracking issue and `phase-N` label for each phase. The labeler applies phase labels from the branch name automatically.                                                                   |
-| 1        | Build Phase 1 (auth)                                                                                     | Implemented Auth.js v5 credentials auth and wrote 41 unit tests. Then ran the real forms end to end against Neon, which found and fixed the absolute-callbackUrl redirect bug.                                 |
+| Phase    | Prompt or intent                                                                                         | What the AI did                                                                                                                                                                                                                                                                                          |
+| -------- | -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Planning | "Research mortgage broker features, plus Stephan Ventures and Finobi, using separate agents"             | Ran 3 parallel research agents (broker workflow and compliance, Stephen Ventures / Carisma, Finobi), then combined their findings into the Australian-broker, compliance-first product direction.                                                                                                        |
+| Planning | "Break this phase by phase, use the GitHub PR workflow, OpenRouter, keep it mobile friendly, handle CSV" | Wrote the phased plan with "done when" criteria, the branch and PR workflow, the code-quality setup, the mobile-first layout rules, and the CSV import/export design (including formula-injection protection).                                                                                           |
+| 0        | "Start Phase 0"                                                                                          | Scaffolded the app and set up the tooling, theme, app shell, Prisma and CI. Kept `main` limited to the README so the scaffold could be reviewed in a PR.                                                                                                                                                 |
+| 1        | "The CI pipeline looks basic, make it more accurate"                                                     | Redesigned CI as parallel, single-purpose jobs, each writing a summary (test counts, coverage table, migration drift, bundle sizes). Added security scanning, PR hygiene and Dependabot.                                                                                                                 |
+| 1        | "Show Phase 0 and Phase 1 explicitly on GitHub"                                                          | Created a milestone, tracking issue and `phase-N` label for each phase. The labeler applies phase labels from the branch name automatically.                                                                                                                                                             |
+| 1        | Build Phase 1 (auth)                                                                                     | Implemented Auth.js v5 credentials auth and wrote 41 unit tests. Then ran the real forms end to end against Neon, which found and fixed the absolute-callbackUrl redirect bug.                                                                                                                           |
+| 2        | Build Phase 2 (Tiptap editor)                                                                            | Built the editor, autosave, versioning, list and delete. Wrote unit tests and Playwright E2E tests, captured screenshots, and **reviewed them visually**. That review found and fixed 2 real bugs (formatted notes failing to save; steady typing never autosaving) and added regression tests for both. |
