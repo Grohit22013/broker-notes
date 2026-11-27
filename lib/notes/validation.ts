@@ -3,6 +3,8 @@ import { z } from "zod";
 import { parseIsoDate } from "@/lib/dates";
 
 import { isDocJson, type DocJson } from "./content";
+import { AMENDMENT_MAX } from "./finalise";
+import { keyFiguresSchema } from "./key-figures";
 import { normalizeTags } from "./tags";
 import { LOAN_STAGE_VALUES, NOTE_TYPE_VALUES } from "./taxonomy";
 
@@ -49,6 +51,22 @@ export const updateNoteMetaSchema = z.object({
     .nullable()
     .optional(),
   pinned: z.boolean().optional(),
+  clientId: z.cuid({ error: "Invalid client" }).nullable().optional(),
+  keyFigures: keyFiguresSchema.nullable().optional(),
 });
 
 export type UpdateNoteMetaInput = z.input<typeof updateNoteMetaSchema>;
+
+export const amendmentSchema = z.object({
+  noteId: noteIdSchema,
+  body: z
+    .string()
+    .trim()
+    .min(1, "Write the amendment first")
+    .max(AMENDMENT_MAX, `Amendments must be ${AMENDMENT_MAX} characters or fewer`),
+});
+
+export const noteTemplateSchema = z.object({
+  templateId: z.string().max(40).default("blank"),
+  clientId: z.cuid().optional().catch(undefined),
+});

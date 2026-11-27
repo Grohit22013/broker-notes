@@ -6,6 +6,7 @@ import {
   startOfNextZonedDay,
   startOfZonedDay,
   toIsoDate,
+  toIsoDateTime,
   zonedMidnight,
   zonedYmd,
 } from "./dates";
@@ -71,5 +72,11 @@ describe("followUpState", () => {
     expect(followUpState(day(2), now)).toBe("overdue");
     expect(followUpState(day(3), now)).toBe("today");
     expect(followUpState(day(4), now)).toBe("upcoming");
+  });
+});
+
+describe("toIsoDateTime", () => {
+  it("formats Sydney local time unambiguously for exports", () => {
+    expect(toIsoDateTime(new Date("2026-11-28T04:05:00Z"))).toBe("2026-11-28 15:05");
   });
 });
