@@ -42,3 +42,16 @@ export function formatRelative(date: Date, now: Date = new Date()): string {
     timeZone: TIME_ZONE,
   }).format(date);
 }
+
+/** Short AU date for badges, e.g. "3 Dec" (adds the year when it isn't the current one). */
+export function formatShortDate(date: Date, now: Date = new Date()): string {
+  const sameYear =
+    new Intl.DateTimeFormat(LOCALE, { year: "numeric", timeZone: TIME_ZONE }).format(date) ===
+    new Intl.DateTimeFormat(LOCALE, { year: "numeric", timeZone: TIME_ZONE }).format(now);
+  return new Intl.DateTimeFormat(LOCALE, {
+    day: "numeric",
+    month: "short",
+    ...(sameYear ? {} : { year: "numeric" }),
+    timeZone: TIME_ZONE,
+  }).format(date);
+}

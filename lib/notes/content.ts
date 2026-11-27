@@ -34,9 +34,43 @@ export function displayTitle(title: string): string {
   return t.length > 0 ? t : UNTITLED;
 }
 
+/** Plain text → one line; block breaks (headings, list items) become " · " separators. */
+function toOneLine(text: string): string {
+  return text
+    .split(/\n+/)
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+    .join(" · ");
+}
+
+export type SnippetParts = { before: string; match: string; after: string };
+
+/**
+ * A preview centred on the first case-insensitive match of `query`, split so the match can be
+ * highlighted. Returns null when there is no match (callers fall back to `snippet`).
+ */
+export function matchSnippet(text: string, query: string, maxLength = 160): SnippetParts | null {
+  const clean = toOneLine(text);
+  const q = query.trim();
+  if (!q) return null;
+  const at = clean.toLowerCase().indexOf(q.toLowerCase());
+  if (at === -1) return null;
+
+  const room = Math.max(0, maxLength - q.length);
+  let start = Math.max(0, at - Math.floor(room / 3));
+  const end = Math.min(clean.length, start + q.length + room);
+  start = Math.max(0, Math.min(start, end - maxLength));
+
+  return {
+    before: `${start > 0 ? "…" : ""}${clean.slice(start, at)}`,
+    match: clean.slice(at, at + q.length),
+    after: `${clean.slice(at + q.length, end)}${end < clean.length ? "…" : ""}`,
+  };
+}
+
 /** Collapses whitespace and truncates on a word boundary, e.g. for list-card previews. */
 export function snippet(text: string, maxLength = 160): string {
-  const clean = text.replace(/\s+/g, " ").trim();
+  const clean = toOneLine(text);
   if (clean.length <= maxLength) return clean;
   const cut = clean.slice(0, maxLength);
   const lastSpace = cut.lastIndexOf(" ");
