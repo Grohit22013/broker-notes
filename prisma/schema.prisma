@@ -12,3 +12,15 @@ datasource db {
   // Direct connection: used by Prisma Migrate.
   directUrl = env("DIRECT_URL")
 }
+
+/// A broker account. Every note and client belongs to exactly one user.
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  /// Always stored lower-cased and trimmed.
+  email        String   @unique
+  /// bcrypt hash — the plain password is never stored.
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}

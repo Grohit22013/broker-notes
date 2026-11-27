@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ClipboardCheck, FileText, ShieldCheck, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { getCurrentUser } from "@/lib/auth/session";
 import { siteConfig } from "@/lib/site";
 
 const features = [
@@ -27,7 +28,9 @@ const features = [
   },
 ] as const;
 
-export default function HomePage() {
+export default async function HomePage() {
+  const user = await getCurrentUser();
+
   return (
     <div className="container-page">
       <section className="py-12 md:py-20">
@@ -39,12 +42,25 @@ export default function HomePage() {
           {siteConfig.description}
         </p>
         <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-          <Button asChild size="lg" className="h-11">
-            <Link href="/notes">Open my notes</Link>
-          </Button>
-          <Button asChild size="lg" variant="outline" className="h-11">
-            <Link href="/notes/new">Start a new note</Link>
-          </Button>
+          {user ? (
+            <>
+              <Button asChild size="lg" className="h-11">
+                <Link href="/notes">Open my notes</Link>
+              </Button>
+              <Button asChild size="lg" variant="outline" className="h-11">
+                <Link href="/notes/new">Start a new note</Link>
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button asChild size="lg" className="h-11">
+                <Link href="/register">Create free account</Link>
+              </Button>
+              <Button asChild size="lg" variant="outline" className="h-11">
+                <Link href="/login">Sign in</Link>
+              </Button>
+            </>
+          )}
         </div>
       </section>
 
