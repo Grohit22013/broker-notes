@@ -23,7 +23,7 @@ The working log for the build. It's updated in every PR and records progress, de
   - [x] Middleware guards `/notes` and `/clients`; `getCurrentUser()` / `requireUser()` helpers
   - [x] User menu with sign-out; bottom nav only shown when signed in
   - [x] 41 unit tests (80% coverage on `lib/`), plus a manual end-to-end check against Neon
-- [ ] **Phase 2: Notes core with Tiptap** (`phase-2/notes-editor`, tracking issue #4)
+- [x] **Phase 2: Notes core with Tiptap** (`phase-2/notes-editor`, PR #23, merged)
   - [x] `Note` and `NoteVersion` models and migration (`add_notes`). Soft delete; indexed by owner and updated date.
   - [x] Notes data layer: every query is scoped by `userId`, and ids are validated as cuids
   - [x] Server actions: create, autosave (validated with Zod and size-capped), soft delete
@@ -33,7 +33,16 @@ The working log for the build. It's updated in every PR and records progress, de
   - [x] Version snapshots, throttled to at most 1 per 5 minutes while editing
   - [x] Notes list: cards with snippets and relative AU dates, empty state, skeletons, delete with confirmation
   - [x] 74 unit tests, plus 8 Playwright E2E tests (desktop and mobile), plus an E2E job in CI
-- [ ] Phase 3: Notes list, search and filters
+- [ ] **Phase 3: Notes list, search and filters** (`phase-3/search-filters`, tracking issue #5)
+  - [x] Note details schema: `noteType`, `loanStage`, `tags[]`, `followUpAt`, `pinned` (migration `note_metadata`)
+  - [x] Search across title and body (case-insensitive), with the match highlighted in the title and in a snippet centred on it
+  - [x] Filters for loan stage, note type and tag; sorting by last edited, created, follow-up or title; pinned notes always first
+  - [x] "Follow-ups due" quick filter with a count (today plus overdue, by the Sydney calendar)
+  - [x] All filter state lives in the URL, so views can be bookmarked or shared and survive a reload; bad params are ignored
+  - [x] Mobile: search plus a Filters bottom sheet with an active-filter count, and the due chip one tap away
+  - [x] Note **Details panel** (right sheet on desktop, bottom sheet on mobile): type, stage, follow-up date, tags with suggestions, pin. Changes apply instantly and save one by one.
+  - [x] Card badges: colour-coded stage, type, tags, follow-up (overdue in red, today in amber); pin/unpin from the card menu
+  - [x] 107 unit tests (including daylight-saving edge cases) and 14 E2E tests (desktop and mobile)
 - [ ] Phase 4: Broker features, plus CSV import and export
 - [ ] Phase 5: AI via OpenRouter
 - [ ] Phase 6: Polish, README and deploy
@@ -66,6 +75,12 @@ The working log for the build. It's updated in every PR and records progress, de
 | 2026-11-28 | Send a plain JSON copy of the doc (`toPlainDoc`) to the server action                                     | ProseMirror uses null-prototype `attrs`, which React's server-action serializer sends as unreadable "temporary references". Formatted notes failed to save until this was fixed (found by E2E).                  |
 | 2026-11-28 | Playwright E2E on desktop and **mobile (Pixel 7)**, against real Postgres in CI                           | Proves the core flow and cross-user isolation on both form factors. Browsers live on D: locally because C: is short on space.                                                                                    |
 | 2026-11-28 | Keep shadcn's official `cn` package                                                                       | I briefly removed it, mistaking it for an unrelated package. It's published by shadcn (`shadcn-ui/cn`), so it was restored, and components import it through `@/lib/utils` so there's one place to change it.    |
+| 2026-11-28 | Note details added in Phase 3 (not Phase 4)                                                               | Filtering by stage, type, tags and follow-ups needs those fields to exist. Phase 4 extends the same panel with clients, key figures, finalise and history.                                                       |
+| 2026-11-28 | Filter state in the **URL**, parsed leniently with Zod                                                    | Shareable and bookmarkable, works with back/forward and reloads. Hand-edited or garbage params are ignored instead of causing errors.                                                                            |
+| 2026-11-28 | Follow-ups stored as **local midnight in Australia/Sydney**                                               | A follow-up is a calendar day, not an instant. Computing "due today" and "overdue" in the broker's time zone (with daylight saving) avoids off-by-one-day bugs from UTC servers.                                 |
+| 2026-11-28 | Client-side taxonomy lists, with a compile-time check against the Prisma enums                            | Client components get labels without bundling Prisma, and `tsc` fails if the lists drift from the enums.                                                                                                         |
+| 2026-11-28 | Search uses `ILIKE` (Prisma `contains`, insensitive) for now                                              | Plenty fast for a broker's notes (hundreds per user). Full-text search or `pg_trgm` is a later optimisation if needed.                                                                                           |
+| 2026-11-28 | Details save instantly and optimistically, with rollback on error                                         | No separate "Save" step for small fields. Server actions run in order, so rapid changes can't arrive out of order.                                                                                               |
 | 2026-11-28 | `next build` without `--turbopack`                                                                        | The webpack production build is the more proven option for deployment.                                                                                                                                           |
 
 ---
@@ -97,3 +112,5 @@ The app is built with Claude Code (Claude Opus 5.5) as a pair programmer. The hu
 | 1        | "Show Phase 0 and Phase 1 explicitly on GitHub"                                                          | Created a milestone, tracking issue and `phase-N` label for each phase. The labeler applies phase labels from the branch name automatically.                                                                                                                                                             |
 | 1        | Build Phase 1 (auth)                                                                                     | Implemented Auth.js v5 credentials auth and wrote 41 unit tests. Then ran the real forms end to end against Neon, which found and fixed the absolute-callbackUrl redirect bug.                                                                                                                           |
 | 2        | Build Phase 2 (Tiptap editor)                                                                            | Built the editor, autosave, versioning, list and delete. Wrote unit tests and Playwright E2E tests, captured screenshots, and **reviewed them visually**. That review found and fixed 2 real bugs (formatted notes failing to save; steady typing never autosaving) and added regression tests for both. |
+| 3        | "Merged it, update main and start Phase 3. Lots of PRs were raised, can we clear them?"                  | Triaged 12 Dependabot PRs: closed 4 majors with ignore rules, combined 7 Actions updates into one PR (#24), and configured Dependabot to skip npm majors and group Actions updates.                                                                                                                      |
+| 3        | Build Phase 3 (search and filters)                                                                       | Built search, filters, the follow-ups view, the Details panel and pinning. Tested with unit tests (daylight-saving edge cases) and E2E on mobile and desktop. Reviewed screenshots and fixed polish issues (duplicate date icon, headings running into snippets, redundant mobile button).               |
