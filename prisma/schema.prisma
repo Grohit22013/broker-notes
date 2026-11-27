@@ -1,0 +1,14 @@
+// Prisma schema for BrokerNotes.
+// Models are added phase by phase (User in Phase 1, Note in Phase 2, Client in Phase 4).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  // Pooled connection (Neon "-pooler" host): used by the app at runtime.
+  url       = env("DATABASE_URL")
+  // Direct connection: used by Prisma Migrate.
+  directUrl = env("DIRECT_URL")
+}
