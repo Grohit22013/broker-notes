@@ -5,6 +5,8 @@ import { startOfNextZonedDay } from "@/lib/dates";
 
 import { EMPTY_DOC, isDocJson, type DocJson } from "./content";
 import { buildNoteOrderBy, buildNoteWhere, type NoteFilters } from "./filters";
+import type { NoteStatusValue } from "./finalise";
+import { parseKeyFigures, type KeyFigures } from "./key-figures";
 import type { LoanStageValue, NoteTypeValue } from "./taxonomy";
 import { noteIdSchema } from "./validation";
 
@@ -21,6 +23,9 @@ const metaSelect = {
   tags: true,
   followUpAt: true,
   pinned: true,
+  status: true,
+  keyFigures: true,
+  client: { select: { id: true, name: true } },
 } as const;
 
 export type NoteMeta = {
@@ -29,6 +34,9 @@ export type NoteMeta = {
   tags: string[];
   followUpAt: Date | null;
   pinned: boolean;
+  status: NoteStatusValue;
+  keyFigures: KeyFigures;
+  client: { id: string; name: string } | null;
 };
 
 export type NoteListItem = NoteMeta & {
@@ -44,7 +52,7 @@ export async function listNotes(
   filters: NoteFilters,
   now: Date = new Date(),
 ): Promise<NoteListItem[]> {
-  return db.note.findMany({
+  const rows = await db.note.findMany({
     where: buildNoteWhere(userId, filters, now),
     orderBy: buildNoteOrderBy(filters.sort),
     select: {
@@ -57,6 +65,25 @@ export async function listNotes(
     },
     take: LIST_LIMIT,
   });
+  return rows.map((r) => ({ ...r, keyFigures: parseKeyFigures(r.keyFigures) }));
+}
+
+/** Rows for CSV export: same filters as the list, no row cap beyond a sane maximum. */
+export async function listNotesForExport(userId: string, filters: NoteFilters) {
+  const rows = await db.note.findMany({
+    where: buildNoteWhere(userId, filters),
+    orderBy: buildNoteOrderBy(filters.sort),
+    take: 5000,
+    select: {
+      title: true,
+      contentText: true,
+      createdAt: true,
+      updatedAt: true,
+      finalisedAt: true,
+      ...metaSelect,
+    },
+  });
+  return rows.map((r) => ({ ...r, keyFigures: parseKeyFigures(r.keyFigures) }));
 }
 
 export type NoteFacets = {
@@ -84,7 +111,13 @@ export async function getNoteFacets(userId: string, now: Date = new Date()): Pro
   return { total, dueCount, tags };
 }
 
-export type NoteDetail = NoteListItem & { contentJson: DocJson };
+export type NoteAmendmentItem = { id: string; body: string; createdAt: Date };
+
+export type NoteDetail = NoteListItem & {
+  contentJson: DocJson;
+  finalisedAt: Date | null;
+  amendments: NoteAmendmentItem[];
+};
 
 export async function getNote(userId: string, id: string): Promise<NoteDetail | null> {
   if (!noteIdSchema.safeParse(id).success) return null;
@@ -97,9 +130,31 @@ export async function getNote(userId: string, id: string): Promise<NoteDetail | 
       contentText: true,
       updatedAt: true,
       createdAt: true,
+      finalisedAt: true,
+      amendments: {
+        orderBy: { createdAt: "asc" },
+        select: { id: true, body: true, createdAt: true },
+      },
       ...metaSelect,
     },
   });
   if (!note) return null;
-  return { ...note, contentJson: isDocJson(note.contentJson) ? note.contentJson : EMPTY_DOC };
+  return {
+    ...note,
+    keyFigures: parseKeyFigures(note.keyFigures),
+    contentJson: isDocJson(note.contentJson) ? note.contentJson : EMPTY_DOC,
+  };
+}
+
+export type NoteVersionItem = { id: string; title: string; createdAt: Date };
+
+/** Version history (newest first). Ownership checked through the parent note. */
+export async function listVersions(userId: string, noteId: string): Promise<NoteVersionItem[]> {
+  if (!noteIdSchema.safeParse(noteId).success) return [];
+  return db.noteVersion.findMany({
+    where: { noteId, note: { userId, deletedAt: null } },
+    orderBy: { createdAt: "desc" },
+    take: 100,
+    select: { id: true, title: true, createdAt: true },
+  });
 }

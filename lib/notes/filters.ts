@@ -10,6 +10,8 @@ export type NoteFilters = {
   stage?: (typeof LOAN_STAGE_VALUES)[number];
   type?: (typeof NOTE_TYPE_VALUES)[number];
   tag?: string;
+  /** Only notes linked to this client (cuid). */
+  client?: string;
   /** Only notes whose follow-up is today or overdue. */
   due: boolean;
   sort: SortValue;
@@ -26,6 +28,7 @@ const filtersSchema = z.object({
   stage: z.preprocess(first, z.enum(LOAN_STAGE_VALUES).optional().catch(undefined)),
   type: z.preprocess(first, z.enum(NOTE_TYPE_VALUES).optional().catch(undefined)),
   tag: z.preprocess(first, z.string().trim().min(1).max(30).optional().catch(undefined)),
+  client: z.preprocess(first, z.cuid().optional().catch(undefined)),
   due: z.preprocess(first, z.literal("1").optional().catch(undefined)).transform((v) => v === "1"),
   sort: z.preprocess(
     first,
@@ -42,6 +45,7 @@ export function parseNoteFilters(
     stage: parsed.stage,
     type: parsed.type,
     tag: parsed.tag,
+    client: parsed.client,
     due: parsed.due,
     sort: parsed.sort,
   };
@@ -54,6 +58,7 @@ export function filtersToSearchParams(filters: Partial<NoteFilters>): URLSearchP
   if (filters.stage) p.set("stage", filters.stage);
   if (filters.type) p.set("type", filters.type);
   if (filters.tag) p.set("tag", filters.tag);
+  if (filters.client) p.set("client", filters.client);
   if (filters.due) p.set("due", "1");
   if (filters.sort && filters.sort !== DEFAULT_SORT) p.set("sort", filters.sort);
   return p;
@@ -61,7 +66,7 @@ export function filtersToSearchParams(filters: Partial<NoteFilters>): URLSearchP
 
 /** Number of active filters (search and sort excluded) — shown on the mobile "Filters" button. */
 export function activeFilterCount(f: NoteFilters): number {
-  return [f.stage, f.type, f.tag, f.due || undefined].filter(Boolean).length;
+  return [f.stage, f.type, f.tag, f.client, f.due || undefined].filter(Boolean).length;
 }
 
 export function hasAnyFilter(f: NoteFilters): boolean {
@@ -79,12 +84,14 @@ export function buildNoteWhere(userId: string, f: NoteFilters, now: Date = new D
       OR: [
         { title: { contains: f.q, mode: "insensitive" as const } },
         { contentText: { contains: f.q, mode: "insensitive" as const } },
+        { client: { name: { contains: f.q, mode: "insensitive" as const } } },
       ],
     });
   }
   if (f.stage) and.push({ loanStage: f.stage });
   if (f.type) and.push({ noteType: f.type });
   if (f.tag) and.push({ tags: { has: f.tag } });
+  if (f.client) and.push({ clientId: f.client });
   if (f.due) and.push({ followUpAt: { lt: startOfNextZonedDay(now) } });
 
   return { userId, deletedAt: null, ...(and.length ? { AND: and } : {}) };
