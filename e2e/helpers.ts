@@ -15,7 +15,8 @@ export async function register(page: Page, name: string, email: string) {
   await page.getByLabel("Password", { exact: true }).fill(E2E_PASSWORD);
   await page.getByLabel("Confirm password").fill(E2E_PASSWORD);
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page).toHaveURL(/\/notes$/);
+  // Registration hashes the password twice (create + sign-in): allow for slow machines.
+  await expect(page).toHaveURL(/\/notes$/, { timeout: 30_000 });
 }
 
 /** The save indicator is rendered twice (mobile/desktop placements); use the visible one. */
@@ -25,7 +26,7 @@ export function saveStatus(page: Page) {
 
 export async function createBlankNote(page: Page) {
   await page.goto("/notes/new");
-  await page.getByRole("button", { name: "Create blank note" }).click();
+  await page.getByRole("button", { name: "Create note from template: Blank note" }).click();
   await expect(page).toHaveURL(/\/notes\/[a-z0-9]{20,}$/);
   await expect(page.getByRole("textbox", { name: "Note body" })).toBeVisible();
 }

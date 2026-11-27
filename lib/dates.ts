@@ -96,3 +96,18 @@ export function followUpState(followUpAt: Date, now: Date = new Date()): FollowU
   if (followUpAt < startOfNextZonedDay(now)) return "today";
   return "upcoming";
 }
+
+/** Unambiguous local timestamp for exports, e.g. "2026-11-28 15:05" (Sydney time). */
+export function toIsoDateTime(date: Date, timeZone = BROKER_TIME_ZONE): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).formatToParts(date);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  return `${get("year")}-${get("month")}-${get("day")} ${get("hour")}:${get("minute")}`;
+}

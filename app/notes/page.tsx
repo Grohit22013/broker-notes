@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { FileText, SearchX } from "lucide-react";
+import { Download, FileText, SearchX, UserRound, X } from "lucide-react";
 
 import { NewNoteButton } from "@/components/notes/new-note-button";
 import { NoteCard } from "@/components/notes/note-card";
@@ -9,8 +9,10 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/session";
-import { hasAnyFilter, parseNoteFilters } from "@/lib/notes/filters";
+import { getClient } from "@/lib/clients/queries";
+import { filtersToSearchParams, hasAnyFilter, parseNoteFilters } from "@/lib/notes/filters";
 import { getNoteFacets, listNotes } from "@/lib/notes/queries";
+import { toNoteCardData } from "@/lib/notes/view";
 
 export const metadata: Metadata = { title: "Notes" };
 
@@ -21,11 +23,14 @@ export default async function NotesPage({ searchParams }: Props) {
   const user = await requireUser();
   const filters = parseNoteFilters(await searchParams);
   const now = new Date();
-  const [notes, facets] = await Promise.all([
+  const [notes, facets, client] = await Promise.all([
     listNotes(user.id, filters, now),
     getNoteFacets(user.id, now),
+    filters.client ? getClient(user.id, filters.client) : null,
   ]);
   const filtering = hasAnyFilter(filters);
+  const exportQuery = filtersToSearchParams(filters).toString();
+  const withoutClient = filtersToSearchParams({ ...filters, client: undefined }).toString();
 
   if (facets.total === 0) {
     return (
@@ -35,7 +40,11 @@ export default async function NotesPage({ searchParams }: Props) {
           icon={FileText}
           title="No notes yet"
           description="Capture your first client conversation — discovery calls, fact finds, lender rationale and more."
-          action={<NewNoteButton label="Create your first note" size="lg" />}
+          action={
+            <Button asChild size="lg" className="h-11">
+              <Link href="/notes/new">Create your first note</Link>
+            </Button>
+          }
         />
       </div>
     );
@@ -46,13 +55,35 @@ export default async function NotesPage({ searchParams }: Props) {
       <PageHeader
         title="Notes"
         description={`${facets.total} ${facets.total === 1 ? "note" : "notes"} · pinned first`}
-        // On phones the bottom nav already has “New”, so keep the list higher up the screen.
         actions={
-          <div className="hidden md:block">
-            <NewNoteButton />
-          </div>
+          <>
+            <Button asChild variant="outline" className="h-10">
+              <a href={`/api/export/notes${exportQuery ? `?${exportQuery}` : ""}`} download>
+                <Download className="size-4" aria-hidden />
+                {filtering ? "Export filtered (CSV)" : "Export CSV"}
+              </a>
+            </Button>
+            {/* On phones the bottom nav already has “New”. */}
+            <div className="hidden md:block">
+              <NewNoteButton />
+            </div>
+          </>
         }
       />
+
+      {client ? (
+        <div className="mb-3">
+          <Link
+            href={withoutClient ? `/notes?${withoutClient}` : "/notes"}
+            className="bg-primary/10 text-primary hover:bg-primary/15 inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-sm font-medium"
+            aria-label={`Remove client filter: ${client.name}`}
+          >
+            <UserRound className="size-4" aria-hidden />
+            {client.name}
+            <X className="size-4" aria-hidden />
+          </Link>
+        </div>
+      ) : null}
 
       <NotesFilters filters={filters} tags={facets.tags} dueCount={facets.dueCount} />
 
@@ -76,21 +107,7 @@ export default async function NotesPage({ searchParams }: Props) {
       ) : (
         <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {notes.map((n) => (
-            <NoteCard
-              key={n.id}
-              query={filters.q}
-              note={{
-                id: n.id,
-                title: n.title,
-                contentText: n.contentText,
-                updatedAt: n.updatedAt.toISOString(),
-                noteType: n.noteType,
-                loanStage: n.loanStage,
-                tags: n.tags,
-                followUpAt: n.followUpAt?.toISOString() ?? null,
-                pinned: n.pinned,
-              }}
-            />
+            <NoteCard key={n.id} query={filters.q} note={toNoteCardData(n)} />
           ))}
         </ul>
       )}

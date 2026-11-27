@@ -16,6 +16,7 @@ describe("parseNoteFilters", () => {
       stage: undefined,
       type: undefined,
       tag: undefined,
+      client: undefined,
       due: false,
       sort: "updated",
     });
@@ -35,6 +36,7 @@ describe("parseNoteFilters", () => {
       stage: "CONDITIONAL",
       type: "FACT_FIND",
       tag: "refinance",
+      client: undefined,
       due: true,
       sort: "followup",
     });
@@ -96,6 +98,7 @@ describe("buildNoteWhere", () => {
           OR: [
             { title: { contains: "anz", mode: "insensitive" } },
             { contentText: { contains: "anz", mode: "insensitive" } },
+            { client: { name: { contains: "anz", mode: "insensitive" } } },
           ],
         },
         { loanStage: "LEAD" },
@@ -103,6 +106,24 @@ describe("buildNoteWhere", () => {
         { tags: { has: "smsf" } },
         { followUpAt: { lt: new Date("2026-12-03T13:00:00.000Z") } }, // before 4 Dec, Sydney
       ],
+    });
+  });
+});
+
+describe("client filter", () => {
+  it("accepts a cuid client id and ignores anything else", () => {
+    expect(parseNoteFilters({ client: "cmwzdoxp20000e9249ao6x6jh" }).client).toBe(
+      "cmwzdoxp20000e9249ao6x6jh",
+    );
+    expect(parseNoteFilters({ client: "1 OR 1=1" }).client).toBeUndefined();
+  });
+
+  it("narrows by clientId", () => {
+    const where = buildNoteWhere("u1", parseNoteFilters({ client: "cmwzdoxp20000e9249ao6x6jh" }));
+    expect(where).toEqual({
+      userId: "u1",
+      deletedAt: null,
+      AND: [{ clientId: "cmwzdoxp20000e9249ao6x6jh" }],
     });
   });
 });

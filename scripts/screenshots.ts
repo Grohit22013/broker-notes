@@ -142,8 +142,23 @@ async function main() {
   await page.waitForURL(/\/notes$/);
   await page.screenshot({ path: `${OUT}/notes-empty-desktop.png` });
 
-  await page.getByRole("button", { name: "Create your first note" }).click();
-  await page.waitForURL(/\/notes\/.+/);
+  // Phase 4: client + template picker
+  await page.goto(`${BASE}/clients`);
+  await page.getByRole("button", { name: "New client" }).first().click();
+  await page.getByRole("dialog").getByLabel("Name").fill("Nguyen family");
+  await page.getByRole("dialog").getByLabel("Email").fill("nguyen@example.com");
+  await page.getByRole("dialog").getByLabel("Phone").fill("0400 123 456");
+  await page.getByRole("dialog").getByRole("button", { name: "Add client" }).click();
+  await page.waitForURL(/\/clients\/.+/);
+  await page.getByRole("link", { name: "New note", exact: true }).click();
+  await page.waitForURL(/\/notes\/new/);
+  await page
+    .getByRole("button", { name: /^Create note from template/ })
+    .first()
+    .waitFor();
+  await page.screenshot({ path: `${OUT}/templates-desktop.png` });
+  await page.getByRole("button", { name: "Create note from template: Blank note" }).click();
+  await page.waitForURL(/\/notes\/[a-z0-9]{20,}$/);
   await fillDemoNote(page);
   await page.screenshot({ path: `${OUT}/editor-desktop.png` });
   const noteUrl = page.url();
@@ -156,8 +171,35 @@ async function main() {
   await page.getByRole("option", { name: "Lead", exact: true }).click();
   await page.getByRole("dialog").getByLabel(/^Tags/).fill("first-home, fhog");
   await page.getByRole("dialog").getByLabel(/^Tags/).press("Enter");
-  await page.getByRole("dialog").getByText("Saved").waitFor();
+  const panel = page.getByRole("dialog");
+  const figures = [
+    ["Loan amount", "680k"],
+    ["Property value", "850k"],
+    ["Household income (p.a.)", "182k"],
+    ["Rate (% p.a.)", "6.04"],
+    ["Lender", "ANZ"],
+  ] as const;
+  for (const [label, value] of figures) {
+    await panel.getByLabel(label).fill(value);
+    await panel.getByLabel(label).press("Enter");
+  }
+  await panel.getByText("80%").waitFor();
+  await panel.getByText("Saved").waitFor();
   await page.screenshot({ path: `${OUT}/details-panel-desktop.png` });
+  await panel.getByText("Key loan figures").scrollIntoViewIfNeeded();
+  await page.screenshot({ path: `${OUT}/key-figures-desktop.png` });
+  await page.keyboard.press("Escape");
+
+  // History panel
+  await page.getByRole("button", { name: "History", exact: true }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("list", { name: "Versions, newest first" })
+    .getByRole("button")
+    .first()
+    .click();
+  await page.getByLabel("Version preview").waitFor();
+  await page.screenshot({ path: `${OUT}/history-desktop.png` });
   await page.keyboard.press("Escape");
 
   await seedDemoNotes(EMAIL);
@@ -170,6 +212,51 @@ async function main() {
   await page.goto(`${BASE}/notes?q=offset`);
   await page.locator("mark").first().waitFor();
   await page.screenshot({ path: `${OUT}/notes-search-desktop.png` });
+
+  // Finalised note with an amendment (on a seeded note)
+  await page.goto(`${BASE}/notes`);
+  await page.getByRole("link", { name: /Chen – lender rationale/ }).click();
+  await page.getByRole("button", { name: "Finalise", exact: true }).click();
+  await page.getByRole("button", { name: "Finalise note" }).click();
+  await page.getByRole("note").waitFor();
+  await page
+    .getByLabel("Add an amendment")
+    .fill("Client confirmed on 2 Dec that $20k of the deposit is a gift; gift letter on file.");
+  await page.getByRole("button", { name: "Add amendment" }).click();
+  await page.getByText("Amendment 1 ·").waitFor();
+  await page.screenshot({ path: `${OUT}/finalised-desktop.png`, fullPage: true });
+
+  // Import preview → clients list → client timeline
+  await page.goto(`${BASE}/clients`);
+  await page.getByRole("button", { name: "Import CSV" }).click();
+  const csv = [
+    "Full Name,E-mail,Mobile",
+    "Asha Patel,asha@example.com,0400 111 222",
+    "Ben Wong,,0411 222 333",
+    ",nobody@example.com,",
+    "Nguyen dup,NGUYEN@example.com,",
+    "Chloe Smith,chloe@example.com,0422 333 444",
+  ].join("\n");
+  await page
+    .getByRole("dialog")
+    .locator("input[type=file]")
+    .setInputFiles({ name: "crm-export.csv", mimeType: "text/csv", buffer: Buffer.from(csv) });
+  await page
+    .getByRole("dialog")
+    .getByText(/ready to import/)
+    .waitFor();
+  await page.waitForTimeout(400); // let the dialog finish animating in
+  await page.screenshot({ path: `${OUT}/import-preview-desktop.png` });
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: /^Import \d/ })
+    .click();
+  await page.getByRole("dialog").getByRole("button", { name: "Done" }).click();
+  await page.getByRole("link", { name: "Open client: Chloe Smith" }).waitFor();
+  await page.screenshot({ path: `${OUT}/clients-desktop.png` });
+  await page.getByRole("link", { name: "Open client: Nguyen family" }).click();
+  await page.getByText(/File notes/).waitFor();
+  await page.screenshot({ path: `${OUT}/client-timeline-desktop.png` });
 
   // Mobile, same session
   const storage = await ctx.storageState();
@@ -193,6 +280,17 @@ async function main() {
   await mp.goto(noteUrl);
   await mp.getByRole("textbox", { name: "Note body" }).waitFor();
   await mp.screenshot({ path: `${OUT}/editor-mobile.png` });
+  await mp.getByRole("button", { name: /^Details/ }).click();
+  await mp.getByRole("dialog").getByText("Key loan figures").scrollIntoViewIfNeeded();
+  await mp.waitForTimeout(400);
+  await mp.screenshot({ path: `${OUT}/details-mobile.png` });
+  await mp.keyboard.press("Escape");
+  await mp.goto(`${BASE}/clients`);
+  await mp
+    .getByRole("link", { name: /^Open client:/ })
+    .first()
+    .waitFor();
+  await mp.screenshot({ path: `${OUT}/clients-mobile.png` });
 
   const dark = await browser.newContext({
     ...devices["iPhone 13"],

@@ -7,6 +7,8 @@ import { MoreVertical, Pin, PinOff, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import {
+  FigureBadge,
+  FinalisedBadge,
   FollowUpBadge,
   PinnedMark,
   StageBadge,
@@ -23,6 +25,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { formatDateTime, formatRelative } from "@/lib/format";
+import { formatAudCompact } from "@/lib/money";
 import { displayTitle, matchSnippet, snippet } from "@/lib/notes/content";
 import type { LoanStageValue, NoteTypeValue } from "@/lib/notes/taxonomy";
 import { cn } from "@/lib/utils";
@@ -38,11 +41,24 @@ export type NoteCardData = {
   tags: string[];
   followUpAt: string | null;
   pinned: boolean;
+  finalised: boolean;
+  clientName: string | null;
+  loanAmount: number | null;
+  lvr: number | null;
 };
 
 const MAX_TAGS_SHOWN = 3;
 
-export function NoteCard({ note, query = "" }: { note: NoteCardData; query?: string }) {
+export function NoteCard({
+  note,
+  query = "",
+  hideClient = false,
+}: {
+  note: NoteCardData;
+  query?: string;
+  /** On a client page the client name is redundant. */
+  hideClient?: boolean;
+}) {
   const router = useRouter();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pinPending, startPin] = useTransition();
@@ -79,6 +95,11 @@ export function NoteCard({ note, query = "" }: { note: NoteCardData; query?: str
             <Highlight text={shownTitle} query={query} />
           </h2>
         </div>
+        {note.clientName && !hideClient ? (
+          <p className="text-primary mt-0.5 truncate text-sm font-medium">
+            <Highlight text={note.clientName} query={query} />
+          </p>
+        ) : null}
 
         <p className="text-muted-foreground mt-1 line-clamp-2 min-h-10 text-sm">
           {match ? (
@@ -97,9 +118,16 @@ export function NoteCard({ note, query = "" }: { note: NoteCardData; query?: str
         </p>
 
         <div className="mt-3 flex flex-wrap gap-1.5">
+          {note.finalised ? <FinalisedBadge /> : null}
           {note.followUpAt ? <FollowUpBadge date={new Date(note.followUpAt)} /> : null}
           {note.loanStage ? <StageBadge stage={note.loanStage} /> : null}
           {note.noteType !== "GENERAL" ? <TypeBadge type={note.noteType} /> : null}
+          {note.loanAmount ? (
+            <FigureBadge>
+              {formatAudCompact(note.loanAmount)}
+              {note.lvr !== null ? ` · ${note.lvr}%` : ""}
+            </FigureBadge>
+          ) : null}
           {note.tags.slice(0, MAX_TAGS_SHOWN).map((t) => (
             <TagBadge key={t} tag={t} />
           ))}

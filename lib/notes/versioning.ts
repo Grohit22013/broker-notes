@@ -1,7 +1,8 @@
 /**
  * Autosave fires every ~1.5s while typing, so snapshotting on every save would flood the
- * history. Instead we keep at most one snapshot per window: a new version is recorded when
- * the content changed AND the latest snapshot is older than the window (or none exists).
+ * history. Instead we keep at most one snapshot per window: when the content changes AND the
+ * latest snapshot is older than the window (or none exists), the state *before* the change is
+ * recorded — so earlier wording can always be restored.
  */
 export const VERSION_WINDOW_MS = 5 * 60 * 1000;
 
