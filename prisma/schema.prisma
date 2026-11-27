@@ -29,22 +29,53 @@ model User {
 
 /// A broker's file note. Rich text is stored as Tiptap JSON; plain text is kept for search/snippets.
 model Note {
-  id          String    @id @default(cuid())
+  id          String     @id @default(cuid())
   userId      String
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  title       String    @default("")
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String     @default("")
   /// Tiptap/ProseMirror document JSON.
   contentJson Json
   /// Plain-text projection of contentJson (search + list snippets).
-  contentText String    @default("")
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  contentText String     @default("")
+  /// What kind of file note this is (drives templates and filtering).
+  noteType    NoteType   @default(GENERAL)
+  /// Where the client's loan is in the pipeline when this note was written (optional).
+  loanStage   LoanStage?
+  /// Free-form labels, e.g. "first-home-buyer", "refinance". De-duplicated case-insensitively.
+  tags        String[]   @default([])
+  /// When the broker needs to follow up (call back, chase documents, review).
+  followUpAt  DateTime?
+  pinned      Boolean    @default(false)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
   /// Soft delete — file notes are compliance records, so we never hard-delete.
   deletedAt   DateTime?
 
   versions NoteVersion[]
 
   @@index([userId, deletedAt, updatedAt(sort: Desc)])
+  @@index([userId, followUpAt])
+}
+
+enum NoteType {
+  DISCOVERY
+  FACT_FIND
+  LENDER_RATIONALE
+  CONDITIONS
+  SETTLEMENT
+  REVIEW
+  GENERAL
+}
+
+/// Simplified Australian home-loan pipeline.
+enum LoanStage {
+  LEAD
+  PRE_APPROVAL
+  APPLICATION
+  CONDITIONAL
+  UNCONDITIONAL
+  SETTLED
+  REVIEW
 }
 
 /// Append-only snapshot of a note, for the audit trail / version history.
