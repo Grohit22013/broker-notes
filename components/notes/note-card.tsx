@@ -1,47 +1,117 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import Link from "next/link";
-import { MoreVertical, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { MoreVertical, Pin, PinOff, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 
+import {
+  FollowUpBadge,
+  PinnedMark,
+  StageBadge,
+  TagBadge,
+  TypeBadge,
+} from "@/components/notes/badges";
 import { DeleteNoteDialog } from "@/components/notes/delete-note-dialog";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { formatDateTime, formatRelative } from "@/lib/format";
-import { displayTitle, snippet } from "@/lib/notes/content";
+import { displayTitle, matchSnippet, snippet } from "@/lib/notes/content";
+import type { LoanStageValue, NoteTypeValue } from "@/lib/notes/taxonomy";
+import { cn } from "@/lib/utils";
+import { updateNoteMetaAction } from "@/server/note-actions";
 
-type NoteCardProps = {
+export type NoteCardData = {
   id: string;
   title: string;
   contentText: string;
   updatedAt: string; // ISO — serialisable across the server/client boundary
+  noteType: NoteTypeValue;
+  loanStage: LoanStageValue | null;
+  tags: string[];
+  followUpAt: string | null;
+  pinned: boolean;
 };
 
-export function NoteCard({ id, title, contentText, updatedAt }: NoteCardProps) {
+const MAX_TAGS_SHOWN = 3;
+
+export function NoteCard({ note, query = "" }: { note: NoteCardData; query?: string }) {
+  const router = useRouter();
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const shownTitle = displayTitle(title);
-  const preview = snippet(contentText);
-  const updated = new Date(updatedAt);
+  const [pinPending, startPin] = useTransition();
+  const shownTitle = displayTitle(note.title);
+  const updated = new Date(note.updatedAt);
+  const match = matchSnippet(note.contentText, query);
+  const preview = match ? null : snippet(note.contentText);
+
+  const togglePin = () =>
+    startPin(async () => {
+      const res = await updateNoteMetaAction({ id: note.id, pinned: !note.pinned });
+      if (!res.ok) return void toast.error(res.error);
+      toast.success(res.meta.pinned ? "Pinned to top" : "Unpinned");
+      router.refresh();
+    });
 
   return (
-    <li className="group bg-card hover:border-primary/40 focus-within:ring-ring/50 relative rounded-xl border transition-colors focus-within:ring-2">
+    <li
+      className={cn(
+        "group bg-card hover:border-primary/40 focus-within:ring-ring/50 relative flex flex-col rounded-xl border transition-colors focus-within:ring-2",
+        note.pinned && "border-primary/30",
+        pinPending && "opacity-60",
+      )}
+    >
       {/* The whole card is a link; the menu button sits above it. */}
       <Link
-        href={`/notes/${id}`}
-        className="block rounded-xl p-4 pr-12 outline-none md:p-5 md:pr-12"
+        href={`/notes/${note.id}`}
+        className="flex flex-1 flex-col rounded-xl p-4 pr-12 outline-none md:p-5 md:pr-12"
         aria-label={`Open note: ${shownTitle}`}
       >
-        <h2 className="line-clamp-1 font-medium">{shownTitle}</h2>
+        <div className="flex items-center gap-1.5">
+          {note.pinned ? <PinnedMark /> : null}
+          <h2 className="line-clamp-1 font-medium">
+            <Highlight text={shownTitle} query={query} />
+          </h2>
+        </div>
+
         <p className="text-muted-foreground mt-1 line-clamp-2 min-h-10 text-sm">
-          {preview || <span className="italic">No content yet</span>}
+          {match ? (
+            <>
+              {match.before}
+              <mark className="rounded-sm bg-amber-200/70 px-0.5 text-inherit dark:bg-amber-400/30">
+                {match.match}
+              </mark>
+              {match.after}
+            </>
+          ) : preview ? (
+            preview
+          ) : (
+            <span className="italic">No content yet</span>
+          )}
         </p>
-        <p className="text-muted-foreground mt-3 text-xs">
-          <time dateTime={updatedAt} title={formatDateTime(updated)}>
+
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {note.followUpAt ? <FollowUpBadge date={new Date(note.followUpAt)} /> : null}
+          {note.loanStage ? <StageBadge stage={note.loanStage} /> : null}
+          {note.noteType !== "GENERAL" ? <TypeBadge type={note.noteType} /> : null}
+          {note.tags.slice(0, MAX_TAGS_SHOWN).map((t) => (
+            <TagBadge key={t} tag={t} />
+          ))}
+          {note.tags.length > MAX_TAGS_SHOWN ? (
+            <span className="text-muted-foreground self-center text-xs">
+              +{note.tags.length - MAX_TAGS_SHOWN}
+            </span>
+          ) : null}
+        </div>
+
+        <p className="text-muted-foreground mt-auto pt-3 text-xs">
+          <time dateTime={note.updatedAt} title={formatDateTime(updated)}>
             Edited {formatRelative(updated)}
           </time>
         </p>
@@ -60,6 +130,18 @@ export function NoteCard({ id, title, contentText, updatedAt }: NoteCardProps) {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={togglePin} disabled={pinPending}>
+              {note.pinned ? (
+                <>
+                  <PinOff className="size-4" aria-hidden /> Unpin
+                </>
+              ) : (
+                <>
+                  <Pin className="size-4" aria-hidden /> Pin to top
+                </>
+              )}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onSelect={() => setConfirmOpen(true)}>
               <Trash2 className="size-4" aria-hidden /> Delete
             </DropdownMenuItem>
@@ -68,11 +150,27 @@ export function NoteCard({ id, title, contentText, updatedAt }: NoteCardProps) {
       </div>
 
       <DeleteNoteDialog
-        noteId={id}
+        noteId={note.id}
         noteTitle={shownTitle}
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
       />
     </li>
+  );
+}
+
+/** Highlights the first case-insensitive occurrence of `query` in a short string (titles). */
+function Highlight({ text, query }: { text: string; query: string }) {
+  const q = query.trim();
+  const at = q ? text.toLowerCase().indexOf(q.toLowerCase()) : -1;
+  if (at === -1) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, at)}
+      <mark className="rounded-sm bg-amber-200/70 px-0.5 text-inherit dark:bg-amber-400/30">
+        {text.slice(at, at + q.length)}
+      </mark>
+      {text.slice(at + q.length)}
+    </>
   );
 }

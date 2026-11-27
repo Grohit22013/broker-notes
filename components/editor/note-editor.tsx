@@ -16,11 +16,13 @@ type NoteEditorProps = {
   noteId: string;
   initialTitle: string;
   initialContent: DocJson;
+  /** Rendered between the title and the body (e.g. note details badges). */
+  belowTitle?: React.ReactNode;
 };
 
 type Draft = { title: string; contentJson: DocJson; contentText: string };
 
-export function NoteEditor({ noteId, initialTitle, initialContent }: NoteEditorProps) {
+export function NoteEditor({ noteId, initialTitle, initialContent, belowTitle }: NoteEditorProps) {
   const [title, setTitle] = useState(initialTitle);
   const titleRef = useRef<HTMLTextAreaElement>(null);
 
@@ -151,6 +153,8 @@ export function NoteEditor({ noteId, initialTitle, initialContent }: NoteEditorP
           }}
           className="placeholder:text-muted-foreground/60 w-full resize-none overflow-hidden bg-transparent text-2xl leading-tight font-semibold tracking-tight outline-none md:text-3xl"
         />
+
+        {belowTitle}
 
         <div className="mt-4 min-h-[50vh]" onClick={() => editor?.commands.focus()}>
           <EditorContent editor={editor} />
