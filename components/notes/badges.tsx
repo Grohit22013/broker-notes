@@ -1,4 +1,4 @@
-import { CalendarClock, Pin } from "lucide-react";
+import { CalendarClock, LockKeyhole, Pin, UserRound } from "lucide-react";
 
 import { followUpState, type FollowUpState } from "@/lib/dates";
 import { formatShortDate } from "@/lib/format";
@@ -81,5 +81,42 @@ export function PinnedMark({ className }: { className?: string }) {
       aria-label="Pinned"
       role="img"
     />
+  );
+}
+
+export function ClientBadge({ name, className }: { name: string; className?: string }) {
+  return (
+    <span className={cn(base, "bg-primary/10 text-primary max-w-56", className)}>
+      <UserRound className="size-3.5 shrink-0" aria-hidden />
+      <span className="truncate">{name}</span>
+    </span>
+  );
+}
+
+/** Neutral badge for key figures (loan amount, LVR, lender). */
+export function FigureBadge({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <span className={cn(base, "bg-muted text-foreground tabular-nums", className)}>{children}</span>
+  );
+}
+
+export function FinalisedBadge({ className }: { className?: string }) {
+  return (
+    <span
+      className={cn(
+        base,
+        "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300",
+        className,
+      )}
+    >
+      <LockKeyhole className="size-3.5" aria-hidden />
+      Finalised
+    </span>
   );
 }

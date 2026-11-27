@@ -18,11 +18,37 @@ type NoteEditorProps = {
   initialContent: DocJson;
   /** Rendered between the title and the body (e.g. note details badges). */
   belowTitle?: React.ReactNode;
+  /** Rendered above the title (e.g. the "finalised" banner). */
+  aboveTitle?: React.ReactNode;
+  /** Rendered after the body (e.g. amendments). */
+  afterBody?: React.ReactNode;
+  /** Finalised notes: no toolbar, no autosave, nothing editable. */
+  readOnly?: boolean;
+  /** Receives an API other components (e.g. version history) can use to drive the editor. */
+  onReady?: (api: NoteEditorApi) => void;
+};
+
+export type NoteEditorApi = {
+  /** Replaces title + body (e.g. restoring a version) and saves immediately. */
+  restore: (title: string, content: DocJson) => void;
+  /** True when there are no unsaved changes. */
+  isSaved: () => boolean;
+  /** Starts saving any pending changes now (server actions run in order, so a following action sees them). */
+  flush: () => void;
 };
 
 type Draft = { title: string; contentJson: DocJson; contentText: string };
 
-export function NoteEditor({ noteId, initialTitle, initialContent, belowTitle }: NoteEditorProps) {
+export function NoteEditor({
+  noteId,
+  initialTitle,
+  initialContent,
+  belowTitle,
+  aboveTitle,
+  afterBody,
+  readOnly = false,
+  onReady,
+}: NoteEditorProps) {
   const [title, setTitle] = useState(initialTitle);
   const titleRef = useRef<HTMLTextAreaElement>(null);
 
@@ -41,6 +67,7 @@ export function NoteEditor({ noteId, initialTitle, initialContent, belowTitle }:
   const editor = useEditor({
     extensions,
     content: initialContent,
+    editable: !readOnly,
     immediatelyRender: false, // required for SSR with Next.js
     editorProps: {
       attributes: {
@@ -72,13 +99,38 @@ export function NoteEditor({ noteId, initialTitle, initialContent, belowTitle }:
   }, [title]);
 
   useEffect(() => {
-    if (!editor) return;
+    if (!editor || readOnly) return;
     const onUpdate = () => queueSave(titleValue.current);
     editor.on("update", onUpdate);
     return () => {
       editor.off("update", onUpdate);
     };
-  }, [editor, queueSave]);
+  }, [editor, queueSave, readOnly]);
+
+  // Expose a small API (used by version history to restore a snapshot).
+  const statusRef = useRef(status);
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
+  useEffect(() => {
+    if (!editor || !onReady) return;
+    onReady({
+      restore: (nextTitle, content) => {
+        editor.commands.setContent(content, { emitUpdate: false });
+        setTitle(nextTitle);
+        titleValue.current = nextTitle;
+        queueSave(nextTitle);
+        flush();
+      },
+      isSaved: () => statusRef.current === "saved" || statusRef.current === "idle",
+      flush,
+    });
+  }, [editor, onReady, queueSave, flush]);
+
+  // Lock/unlock when the note is finalised without remounting the editor.
+  useEffect(() => {
+    editor?.setEditable(!readOnly);
+  }, [editor, readOnly]);
 
   // Ctrl/Cmd+S saves immediately (habit from desktop apps).
   useEffect(() => {
@@ -108,7 +160,10 @@ export function NoteEditor({ noteId, initialTitle, initialContent, belowTitle }:
   return (
     <div className="flex flex-col">
       {/* Sticky toolbar + save status, sits just under the app header. */}
-      <div className="bg-background/95 sticky top-[calc(3.5rem+env(safe-area-inset-top,0px))] z-30 -mx-4 border-b backdrop-blur sm:-mx-6 lg:-mx-8">
+      <div
+        hidden={readOnly}
+        className="bg-background/95 sticky top-[calc(3.5rem+env(safe-area-inset-top,0px))] z-30 -mx-4 border-b backdrop-blur sm:-mx-6 lg:-mx-8"
+      >
         <div className="container-page flex items-center gap-2 px-0 sm:px-2 lg:px-4">
           <div className="relative min-w-0 flex-1">
             {editor ? <EditorToolbar editor={editor} /> : <div className="h-[52px] md:h-11" />}
@@ -125,9 +180,13 @@ export function NoteEditor({ noteId, initialTitle, initialContent, belowTitle }:
       </div>
 
       <div className="mx-auto w-full max-w-3xl py-6 md:py-10">
-        <div className="mb-2 sm:hidden">
-          <SaveStatusIndicator status={status} error={error} onRetry={flush} />
-        </div>
+        {readOnly ? null : (
+          <div className="mb-2 sm:hidden">
+            <SaveStatusIndicator status={status} error={error} onRetry={flush} />
+          </div>
+        )}
+
+        {aboveTitle}
 
         <label htmlFor="note-title" className="sr-only">
           Note title
@@ -138,6 +197,7 @@ export function NoteEditor({ noteId, initialTitle, initialContent, belowTitle }:
           rows={1}
           maxLength={TITLE_MAX}
           value={title}
+          readOnly={readOnly}
           placeholder="Untitled note"
           onChange={(e) => {
             const next = e.target.value.replace(/\n/g, " ");
@@ -156,12 +216,18 @@ export function NoteEditor({ noteId, initialTitle, initialContent, belowTitle }:
 
         {belowTitle}
 
-        <div className="mt-4 min-h-[50vh]" onClick={() => editor?.commands.focus()}>
+        <div
+          className={readOnly ? "mt-4" : "mt-4 min-h-[50vh]"}
+          onClick={() => !readOnly && editor?.commands.focus()}
+        >
           <EditorContent editor={editor} />
         </div>
 
+        {afterBody}
+
         <p className="text-muted-foreground mt-8 text-xs">
-          {words ?? 0} {words === 1 ? "word" : "words"} · Changes save automatically
+          {words ?? 0} {words === 1 ? "word" : "words"}
+          {readOnly ? " · Finalised (read-only)" : " · Changes save automatically"}
         </p>
       </div>
     </div>

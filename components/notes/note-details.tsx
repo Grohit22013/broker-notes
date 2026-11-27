@@ -1,11 +1,32 @@
 "use client";
 
-import { createContext, use, useCallback, useId, useMemo, useState, useTransition } from "react";
+import {
+  createContext,
+  use,
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useState,
+  useTransition,
+} from "react";
 import { useRouter } from "next/navigation";
-import { Check, Loader2, Pin, Plus, SlidersHorizontal, X } from "lucide-react";
+import {
+  Banknote,
+  Check,
+  Loader2,
+  Lock,
+  Pin,
+  Plus,
+  SlidersHorizontal,
+  User,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import {
+  ClientBadge,
+  FigureBadge,
   FollowUpBadge,
   PinnedMark,
   StageBadge,
@@ -19,9 +40,11 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
 import {
   Sheet,
   SheetContent,
@@ -31,6 +54,8 @@ import {
 } from "@/components/ui/sheet";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { parseIsoDate, zonedMidnight } from "@/lib/dates";
+import { formatAud, formatAudCompact, parseMoney, parseRate } from "@/lib/money";
+import { LENDERS, lvrOf, type KeyFigures } from "@/lib/notes/key-figures";
 import { MAX_TAGS, normalizeTags, parseTagInput } from "@/lib/notes/tags";
 import {
   LOAN_STAGES,
@@ -39,9 +64,11 @@ import {
   type NoteTypeValue,
 } from "@/lib/notes/taxonomy";
 import { cn } from "@/lib/utils";
+import { createClientAction } from "@/server/client-actions";
 import { updateNoteMetaAction, type NoteMetaDto } from "@/server/note-actions";
 
 type Patch = Partial<NoteMetaDto>;
+export type ClientOption = { id: string; name: string };
 
 type Ctx = {
   meta: NoteMetaDto;
@@ -50,11 +77,14 @@ type Ctx = {
   open: boolean;
   setOpen: (open: boolean) => void;
   tagSuggestions: string[];
+  clients: ClientOption[];
+  addClient: (c: ClientOption) => void;
+  locked: boolean;
 };
 
 const NoteDetailsContext = createContext<Ctx | null>(null);
 
-function useNoteDetails(): Ctx {
+export function useNoteDetails(): Ctx {
   const ctx = use(NoteDetailsContext);
   if (!ctx) throw new Error("useNoteDetails must be used inside <NoteDetailsProvider>");
   return ctx;
@@ -65,17 +95,23 @@ export function NoteDetailsProvider({
   noteId,
   initial,
   tagSuggestions,
+  clients: initialClients,
   children,
 }: {
   noteId: string;
   initial: NoteMetaDto;
   tagSuggestions: string[];
+  clients: ClientOption[];
   children: React.ReactNode;
 }) {
   const router = useRouter();
   const [meta, setMeta] = useState(initial);
+  const [clients, setClients] = useState(initialClients);
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
+
+  // Server is the source of truth for status (e.g. after finalising).
+  useEffect(() => setMeta((m) => ({ ...m, status: initial.status })), [initial.status]);
 
   const update = useCallback(
     (patch: Patch) => {
@@ -95,9 +131,25 @@ export function NoteDetailsProvider({
     [meta, noteId, router],
   );
 
+  const addClient = useCallback(
+    (c: ClientOption) =>
+      setClients((list) => [...list, c].sort((a, b) => a.name.localeCompare(b.name, "en-AU"))),
+    [],
+  );
+
   const value = useMemo(
-    () => ({ meta, update, pending, open, setOpen, tagSuggestions }),
-    [meta, update, pending, open, tagSuggestions],
+    () => ({
+      meta,
+      update,
+      pending,
+      open,
+      setOpen,
+      tagSuggestions,
+      clients,
+      addClient,
+      locked: meta.status === "FINALISED",
+    }),
+    [meta, update, pending, open, tagSuggestions, clients, addClient],
   );
   return <NoteDetailsContext value={value}>{children}</NoteDetailsContext>;
 }
@@ -105,9 +157,13 @@ export function NoteDetailsProvider({
 /** Button in the editor header that opens the details panel. */
 export function NoteDetailsButton() {
   const { setOpen, meta } = useNoteDetails();
-  const filled = [meta.loanStage, meta.followUpDate, meta.tags.length || null].filter(
-    Boolean,
-  ).length;
+  const filled = [
+    meta.clientId,
+    meta.loanStage,
+    meta.followUpDate,
+    meta.tags.length || null,
+    Object.keys(meta.keyFigures).length || null,
+  ].filter(Boolean).length;
   return (
     <Button variant="outline" size="sm" className="h-10" onClick={() => setOpen(true)}>
       <SlidersHorizontal className="size-4" aria-hidden />
@@ -125,12 +181,16 @@ export function NoteDetailsButton() {
 export function NoteDetailsSummary() {
   const { meta, setOpen } = useNoteDetails();
   const followUp = meta.followUpDate ? parseIsoDate(meta.followUpDate) : null;
+  const k = meta.keyFigures;
+  const lvr = lvrOf(k);
   const empty =
     !meta.pinned &&
+    !meta.clientId &&
     !meta.loanStage &&
     meta.noteType === "GENERAL" &&
     !followUp &&
-    meta.tags.length === 0;
+    meta.tags.length === 0 &&
+    Object.keys(k).length === 0;
 
   return (
     <button
@@ -141,13 +201,21 @@ export function NoteDetailsSummary() {
     >
       {empty ? (
         <span className="text-muted-foreground inline-flex items-center gap-1 text-sm">
-          <Plus className="size-4" aria-hidden /> Add type, loan stage, follow-up or tags
+          <Plus className="size-4" aria-hidden /> Add client, loan stage, figures, follow-up or tags
         </span>
       ) : (
         <>
           {meta.pinned ? <PinnedMark /> : null}
+          {meta.clientName ? <ClientBadge name={meta.clientName} /> : null}
           <TypeBadge type={meta.noteType} />
           {meta.loanStage ? <StageBadge stage={meta.loanStage} /> : null}
+          {k.loanAmount ? (
+            <FigureBadge>
+              {formatAudCompact(k.loanAmount)}
+              {lvr !== null ? ` · ${lvr}% LVR` : ""}
+            </FigureBadge>
+          ) : null}
+          {k.lender ? <FigureBadge>{k.lender}</FigureBadge> : null}
           {followUp ? <FollowUpBadge date={zonedMidnight(followUp)} /> : null}
           {meta.tags.map((t) => (
             <TagBadge key={t} tag={t} />
@@ -159,10 +227,11 @@ export function NoteDetailsSummary() {
 }
 
 const NONE = "none";
+const NEW_CLIENT = "__new__";
 
 /** Side sheet on desktop, bottom sheet on phones. */
 export function NoteDetailsSheet() {
-  const { meta, update, pending, open, setOpen, tagSuggestions } = useNoteDetails();
+  const { meta, update, pending, open, setOpen, tagSuggestions, locked } = useNoteDetails();
   const isDesktop = useMediaQuery("(min-width: 768px)");
   const ids = useId();
 
@@ -170,7 +239,10 @@ export function NoteDetailsSheet() {
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetContent
         side={isDesktop ? "right" : "bottom"}
-        className={cn(isDesktop ? "w-full sm:max-w-sm" : "pb-safe max-h-[90dvh] rounded-t-2xl")}
+        className={cn(
+          "gap-0",
+          isDesktop ? "w-full sm:max-w-md" : "pb-safe max-h-[90dvh] rounded-t-2xl",
+        )}
       >
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
@@ -187,13 +259,24 @@ export function NoteDetailsSheet() {
               )}
             </span>
           </SheetTitle>
-          <SheetDescription>Used to filter and sort your notes list.</SheetDescription>
+          <SheetDescription>Used to organise, filter and export your notes.</SheetDescription>
         </SheetHeader>
 
-        <div className="grid gap-5 overflow-y-auto px-4 pb-6">
+        <div className="grid gap-5 overflow-y-auto px-4 pb-8">
+          {locked ? (
+            <p className="bg-muted text-muted-foreground flex gap-2 rounded-md p-3 text-sm">
+              <Lock className="mt-0.5 size-4 shrink-0" aria-hidden />
+              This note is finalised: client, type and figures are locked. You can still update the
+              loan stage, follow-up, tags and pin.
+            </p>
+          ) : null}
+
+          <ClientField />
+
           <Field label="Note type" htmlFor={`${ids}-type`}>
             <Select
               value={meta.noteType}
+              disabled={locked}
               onValueChange={(v) => update({ noteType: v as NoteTypeValue })}
             >
               <SelectTrigger id={`${ids}-type`} className="h-11 w-full">
@@ -232,15 +315,13 @@ export function NoteDetailsSheet() {
 
           <Field label="Follow-up date" htmlFor={`${ids}-followup`}>
             <div className="flex gap-2">
-              <div className="flex-1">
-                <Input
-                  id={`${ids}-followup`}
-                  type="date"
-                  value={meta.followUpDate ?? ""}
-                  onChange={(e) => update({ followUpDate: e.target.value || null })}
-                  className="h-11 text-base md:text-sm"
-                />
-              </div>
+              <Input
+                id={`${ids}-followup`}
+                type="date"
+                value={meta.followUpDate ?? ""}
+                onChange={(e) => update({ followUpDate: e.target.value || null })}
+                className="h-11 flex-1 text-base md:text-sm"
+              />
               {meta.followUpDate ? (
                 <Button
                   variant="ghost"
@@ -270,9 +351,265 @@ export function NoteDetailsSheet() {
             <Pin className={cn("size-4", meta.pinned && "fill-current")} aria-hidden />
             {meta.pinned ? "Pinned to top of your list" : "Pin to top of your list"}
           </Button>
+
+          <Separator />
+          <KeyFiguresFields />
         </div>
       </SheetContent>
     </Sheet>
+  );
+}
+
+function ClientField() {
+  const { meta, update, clients, addClient, locked } = useNoteDetails();
+  const id = useId();
+  const [creating, setCreating] = useState(false);
+  const [name, setName] = useState("");
+  const [saving, startSaving] = useTransition();
+
+  const create = () =>
+    startSaving(async () => {
+      const res = await createClientAction({ name });
+      if (!res.ok) return void toast.error(res.error);
+      addClient({ id: res.client.id, name: res.client.name });
+      update({ clientId: res.client.id, clientName: res.client.name });
+      setCreating(false);
+      setName("");
+      toast.success(`Client “${res.client.name}” added`);
+    });
+
+  return (
+    <Field label="Client" htmlFor={id}>
+      {creating ? (
+        <form
+          className="flex gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (name.trim()) create();
+          }}
+        >
+          <Input
+            id={id}
+            autoFocus
+            placeholder="Client or household name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="h-11 flex-1 text-base md:text-sm"
+          />
+          <Button type="submit" className="h-11" disabled={saving || !name.trim()}>
+            {saving ? <Loader2 className="size-4 animate-spin" aria-hidden /> : "Add"}
+          </Button>
+          <Button type="button" variant="ghost" className="h-11" onClick={() => setCreating(false)}>
+            Cancel
+          </Button>
+        </form>
+      ) : (
+        <Select
+          value={meta.clientId ?? NONE}
+          disabled={locked}
+          onValueChange={(v) => {
+            if (v === NEW_CLIENT) return setCreating(true);
+            const c = clients.find((x) => x.id === v);
+            update({ clientId: c?.id ?? null, clientName: c?.name ?? null });
+          }}
+        >
+          <SelectTrigger id={id} className="h-11 w-full">
+            <span className="flex items-center gap-2 truncate">
+              <User className="text-muted-foreground size-4 shrink-0" aria-hidden />
+              <SelectValue />
+            </span>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={NONE}>No client</SelectItem>
+            {clients.map((c) => (
+              <SelectItem key={c.id} value={c.id}>
+                {c.name}
+              </SelectItem>
+            ))}
+            <SelectSeparator />
+            <SelectItem value={NEW_CLIENT}>+ New client…</SelectItem>
+          </SelectContent>
+        </Select>
+      )}
+    </Field>
+  );
+}
+
+function KeyFiguresFields() {
+  const { meta, update, locked } = useNoteDetails();
+  const ids = useId();
+  const k = meta.keyFigures;
+  const lvr = lvrOf(k);
+
+  const setFigure = (patch: Partial<KeyFigures>) => update({ keyFigures: { ...k, ...patch } });
+
+  return (
+    <section aria-labelledby={`${ids}-kf`} className="grid gap-4">
+      <div className="flex items-center gap-2">
+        <Banknote className="text-primary size-4" aria-hidden />
+        <h3 id={`${ids}-kf`} className="text-sm font-semibold">
+          Key loan figures
+        </h3>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <MoneyField
+          label="Loan amount"
+          value={k.loanAmount ?? null}
+          disabled={locked}
+          onCommit={(v) => setFigure({ loanAmount: v })}
+        />
+        <MoneyField
+          label="Property value"
+          value={k.propertyValue ?? null}
+          disabled={locked}
+          onCommit={(v) => setFigure({ propertyValue: v })}
+        />
+      </div>
+      <div
+        className={cn(
+          "rounded-md border px-3 py-2 text-sm",
+          lvr !== null && lvr > 80 ? "border-amber-300 bg-amber-50 dark:bg-amber-950/40" : "",
+        )}
+        aria-live="polite"
+      >
+        <span className="text-muted-foreground">LVR: </span>
+        <span className="font-semibold tabular-nums">{lvr !== null ? `${lvr}%` : "—"}</span>
+        {lvr !== null && lvr > 80 ? (
+          <span className="text-muted-foreground"> · above 80%, LMI likely applies</span>
+        ) : null}
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <MoneyField
+          label="Household income (p.a.)"
+          value={k.income ?? null}
+          disabled={locked}
+          onCommit={(v) => setFigure({ income: v })}
+        />
+        <TextFigure
+          label="Rate (% p.a.)"
+          value={k.rate !== null && k.rate !== undefined ? String(k.rate) : ""}
+          placeholder="6.19"
+          inputMode="decimal"
+          disabled={locked}
+          parse={parseRate}
+          error="Enter a rate between 0 and 30"
+          onCommit={(v) => setFigure({ rate: v as number | null })}
+        />
+      </div>
+      <TextFigure
+        label="Lender"
+        value={k.lender ?? ""}
+        placeholder="e.g. ANZ"
+        list={`${ids}-lenders`}
+        disabled={locked}
+        parse={(s) => s.trim().slice(0, 60)}
+        onCommit={(v) => setFigure({ lender: (v as string) || null })}
+      />
+      <datalist id={`${ids}-lenders`}>
+        {LENDERS.map((l) => (
+          <option key={l} value={l} />
+        ))}
+      </datalist>
+    </section>
+  );
+}
+
+/** Money input: accepts "850k", "$1.2m", "850,000"; shows the formatted value when not editing. */
+function MoneyField({
+  label,
+  value,
+  disabled,
+  onCommit,
+}: {
+  label: string;
+  value: number | null;
+  disabled?: boolean;
+  onCommit: (v: number | null) => void;
+}) {
+  return (
+    <TextFigure
+      label={label}
+      value={value !== null ? formatAud(value) : ""}
+      placeholder="e.g. 850k"
+      inputMode="decimal"
+      disabled={disabled}
+      parse={parseMoney}
+      error="Try a number like 850000, 850k or 1.2m"
+      onCommit={(v) => onCommit(v as number | null)}
+      compare={value}
+    />
+  );
+}
+
+function TextFigure({
+  label,
+  value,
+  placeholder,
+  inputMode,
+  list,
+  disabled,
+  parse,
+  error,
+  onCommit,
+  compare,
+}: {
+  label: string;
+  value: string;
+  placeholder?: string;
+  inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
+  list?: string;
+  disabled?: boolean;
+  parse: (s: string) => number | string | null;
+  error?: string;
+  onCommit: (v: number | string | null) => void;
+  /** The stored value, to skip saving when nothing changed. */
+  compare?: number | string | null;
+}) {
+  const id = useId();
+  const [draft, setDraft] = useState<string | null>(null);
+  const [invalid, setInvalid] = useState(false);
+
+  const commit = () => {
+    if (draft === null) return;
+    const trimmed = draft.trim();
+    const parsed = trimmed === "" ? null : parse(trimmed);
+    if (trimmed !== "" && (parsed === null || parsed === "")) {
+      setInvalid(true);
+      return;
+    }
+    setInvalid(false);
+    setDraft(null);
+    if (parsed !== (compare === undefined ? value : compare)) onCommit(parsed);
+  };
+
+  return (
+    <div className="grid gap-1.5">
+      <Label htmlFor={id} className="text-xs">
+        {label}
+      </Label>
+      <Input
+        id={id}
+        value={draft ?? value}
+        placeholder={placeholder}
+        inputMode={inputMode}
+        list={list}
+        disabled={disabled}
+        aria-invalid={invalid || undefined}
+        // Start editing from the raw number — but never clobber a draft the broker is already typing.
+        onFocus={() => setDraft((d) => d ?? value.replace(/[$,]/g, ""))}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+        }}
+        className="h-11 text-base tabular-nums md:text-sm"
+      />
+      {invalid && error ? (
+        <p className="text-destructive text-xs" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
