@@ -23,4 +23,38 @@ model User {
   passwordHash String
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  notes Note[]
+}
+
+/// A broker's file note. Rich text is stored as Tiptap JSON; plain text is kept for search/snippets.
+model Note {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String    @default("")
+  /// Tiptap/ProseMirror document JSON.
+  contentJson Json
+  /// Plain-text projection of contentJson (search + list snippets).
+  contentText String    @default("")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  /// Soft delete — file notes are compliance records, so we never hard-delete.
+  deletedAt   DateTime?
+
+  versions NoteVersion[]
+
+  @@index([userId, deletedAt, updatedAt(sort: Desc)])
+}
+
+/// Append-only snapshot of a note, for the audit trail / version history.
+model NoteVersion {
+  id          String   @id @default(cuid())
+  noteId      String
+  note        Note     @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  title       String
+  contentJson Json
+  createdAt   DateTime @default(now())
+
+  @@index([noteId, createdAt(sort: Desc)])
 }
