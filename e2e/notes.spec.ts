@@ -16,7 +16,8 @@ test.describe("notes with the Tiptap editor", () => {
 
     // Empty state on first visit
     await expect(page.getByRole("heading", { name: "No notes yet" })).toBeVisible();
-    await page.getByRole("button", { name: "Create your first note" }).click();
+    await page.getByRole("link", { name: "Create your first note" }).click();
+    await page.getByRole("button", { name: "Create note from template: Blank note" }).click();
     await expect(page).toHaveURL(/\/notes\/[a-z0-9]{20,}$/);
     const noteUrl = page.url();
 
