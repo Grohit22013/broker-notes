@@ -1,0 +1,43 @@
+# actions/labeler v5 config — labels applied automatically to PRs.
+
+# ── Phase labels from the branch name (phase-N/…) ──
+phase-0:
+  - head-branch: ["^phase-0/"]
+phase-1:
+  - head-branch: ["^phase-1/"]
+phase-2:
+  - head-branch: ["^phase-2/"]
+phase-3:
+  - head-branch: ["^phase-3/"]
+phase-4:
+  - head-branch: ["^phase-4/"]
+phase-5:
+  - head-branch: ["^phase-5/"]
+phase-6:
+  - head-branch: ["^phase-6/"]
+phase-7:
+  - head-branch: ["^phase-7/"]
+
+# ── Area labels from the files changed ──
+"area: ci":
+  - changed-files:
+      - any-glob-to-any-file: [".github/**", ".husky/**"]
+"area: ui":
+  - changed-files:
+      - any-glob-to-any-file: ["components/**", "app/**/*.tsx", "app/globals.css"]
+"area: db":
+  - changed-files:
+      - any-glob-to-any-file: ["prisma/**", "lib/db.ts"]
+"area: auth":
+  - changed-files:
+      - any-glob-to-any-file:
+          ["auth.ts", "auth.config.ts", "middleware.ts", "app/(auth)/**", "lib/auth/**"]
+"area: ai":
+  - changed-files:
+      - any-glob-to-any-file: ["lib/ai*", "lib/redact*", "app/**/ai-*"]
+"area: editor":
+  - changed-files:
+      - any-glob-to-any-file: ["components/editor/**"]
+dependencies:
+  - changed-files:
+      - any-glob-to-any-file: ["package.json", "package-lock.json"]

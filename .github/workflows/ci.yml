@@ -1,3 +1,16 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# CI pipeline for BrokerNotes
+#
+#   lint ─┐
+#   format ┤
+#   typecheck ┼──► ✅ CI passed  (single required status check)
+#   unit-tests ┤
+#   database ┤
+#   build ─┘
+#
+# Every check is its own job so a PR shows exactly what failed, and the jobs
+# run in parallel. Each job writes a short report to the run's Summary page.
+# ──────────────────────────────────────────────────────────────────────────────
 name: CI
 
 on:
@@ -5,44 +18,237 @@ on:
     branches: [main]
   push:
     branches: [main]
+  workflow_dispatch:
 
+# Least privilege by default; jobs opt in to more if they need it.
+permissions:
+  contents: read
+
+# Cancel superseded runs on the same branch/PR.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+env:
+  NODE_VERSION: 20
+  NEXT_TELEMETRY_DISABLED: 1
+  # Placeholders so Prisma generate / Next build work without real secrets.
+  DATABASE_URL: postgresql://postgres:postgres@localhost:5432/brokernotes_ci
+  DIRECT_URL: postgresql://postgres:postgres@localhost:5432/brokernotes_ci
+  AUTH_SECRET: ci-only-not-a-real-secret
+
 jobs:
-  quality:
-    name: Lint, typecheck, test & build
+  # ── 🔍 ESLint ──────────────────────────────────────────────────────────────
+  lint:
+    name: 🔍 Lint
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    env:
-      # Placeholders so Prisma/Next can build without real secrets.
-      DATABASE_URL: postgresql://user:pass@localhost:5432/ci
-      DIRECT_URL: postgresql://user:pass@localhost:5432/ci
-      AUTH_SECRET: ci-only-not-a-real-secret
-      NEXT_TELEMETRY_DISABLED: 1
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: ${{ env.NODE_VERSION }}
           cache: npm
+      - run: npm ci
+      # setup-node registers ESLint problem matchers → errors show inline on the PR diff.
+      - name: ESLint
+        run: npx eslint . --max-warnings=0
+      - name: Summary
+        if: success()
+        run: echo "### 🔍 Lint — ✅ no ESLint errors or warnings" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Install dependencies
-        run: npm ci
+  # ── 🎨 Prettier ────────────────────────────────────────────────────────────
+  format:
+    name: 🎨 Format
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Prettier check
+        run: |
+          if ! npx prettier --check . > prettier.log 2>&1; then
+            {
+              echo "### 🎨 Format — ❌ files need formatting"
+              echo "Run \`npm run format\` locally and commit."
+              echo '```'
+              grep '\[warn\]' prettier.log | grep -v 'Code style issues' || true
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            cat prettier.log
+            exit 1
+          fi
+          echo "### 🎨 Format — ✅ all files match Prettier style" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Lint
-        run: npm run lint
+  # ── 🔷 TypeScript ──────────────────────────────────────────────────────────
+  typecheck:
+    name: 🔷 Typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci # postinstall runs `prisma generate` so Prisma types exist
+      - name: tsc --noEmit
+        run: npx tsc --noEmit --pretty false
+      - name: Summary
+        if: success()
+        run: echo "### 🔷 Typecheck — ✅ no TypeScript errors (strict mode)" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Format check
-        run: npm run format:check
+  # ── 🧪 Vitest + coverage ───────────────────────────────────────────────────
+  unit-tests:
+    name: 🧪 Unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - name: Vitest (coverage thresholds enforced)
+        run: npx vitest run --coverage
+      - name: Test & coverage summary
+        if: always()
+        run: |
+          node <<'EOF' >> "$GITHUB_STEP_SUMMARY"
+          const fs = require("fs");
+          const out = [];
+          if (fs.existsSync("reports/junit.xml")) {
+            const x = fs.readFileSync("reports/junit.xml", "utf8");
+            const m = x.match(/<testsuites[^>]*tests="(\d+)"[^>]*failures="(\d+)"[^>]*errors="(\d+)"[^>]*time="([\d.]+)"/);
+            if (m) {
+              const [, tests, failures, errors, time] = m;
+              const failed = Number(failures) + Number(errors);
+              out.push(`### 🧪 Unit tests — ${failed ? "❌" : "✅"} ${tests - failed}/${tests} passed in ${Number(time).toFixed(2)}s`);
+            }
+          }
+          if (fs.existsSync("coverage/coverage-summary.json")) {
+            const t = JSON.parse(fs.readFileSync("coverage/coverage-summary.json", "utf8")).total;
+            const row = (k, label, min) => `| ${label} | ${t[k].pct}% | ${t[k].covered}/${t[k].total} | ${min}% | ${t[k].pct >= min ? "✅" : "❌"} |`;
+            out.push("", "**Coverage (`lib/`)**", "", "| Metric | % | Covered | Threshold | |", "|---|---|---|---|---|",
+              row("lines", "Lines", 70), row("statements", "Statements", 70), row("functions", "Functions", 70), row("branches", "Branches", 60));
+          }
+          console.log(out.join("\n"));
+          EOF
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 7
 
-      - name: Typecheck
-        run: npm run typecheck
+  # ── 🗄️ Database (real Postgres) ────────────────────────────────────────────
+  database:
+    name: 🗄️ Database schema & migrations
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: brokernotes_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - name: Validate schema
+        run: npx prisma validate
+      - name: Check schema formatting
+        run: npx prisma format --check
+      - name: Apply all migrations to a fresh database
+        run: npx prisma migrate deploy
+      - name: Detect drift (schema.prisma changed without a migration)
+        run: |
+          npx prisma migrate diff \
+            --from-url "$DATABASE_URL" \
+            --to-schema-datamodel prisma/schema.prisma \
+            --exit-code \
+            && echo "No drift" \
+            || { echo "::error file=prisma/schema.prisma::schema.prisma has changes not captured in a migration. Run \`npm run db:migrate\`."; exit 1; }
+      - name: Summary
+        if: always()
+        run: |
+          count=$(ls -d prisma/migrations/*/ 2>/dev/null | wc -l | tr -d ' ')
+          {
+            echo "### 🗄️ Database — ${{ job.status == 'success' && '✅' || '❌' }}"
+            echo "| Check | Result |"
+            echo "|---|---|"
+            echo "| Postgres | 17 (service container) |"
+            echo "| Migrations applied | ${count} |"
+            echo "| Schema valid & formatted | ${{ job.status == 'success' && '✅' || 'see logs' }} |"
+            echo "| Drift vs. migrations | ${{ job.status == 'success' && '✅ none' || 'see logs' }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Unit tests
-        run: npm test
+  # ── 🏗️ Next.js production build ────────────────────────────────────────────
+  build:
+    name: 🏗️ Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - name: Restore Next.js build cache
+        uses: actions/cache@v4
+        with:
+          path: .next/cache
+          key: nextjs-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ hashFiles('**/*.ts', '**/*.tsx', '**/*.css') }}
+          restore-keys: |
+            nextjs-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-
+      - name: next build
+        run: npm run build 2>&1 | tee build.log; exit ${PIPESTATUS[0]}
+      - name: Bundle size summary
+        if: success()
+        run: |
+          {
+            echo "### 🏗️ Build — ✅ production build succeeded"
+            echo ""
+            echo "**Routes & bundle sizes**"
+            echo '```'
+            sed -n '/^Route (app)/,/^$/p' build.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Build
-        run: npm run build
+  # ── ✅ Single gate for branch protection ───────────────────────────────────
+  ci-passed:
+    name: ✅ CI passed
+    if: always()
+    needs: [lint, format, typecheck, unit-tests, database, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Report & verify all jobs
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          node <<'EOF' >> "$GITHUB_STEP_SUMMARY"
+          const needs = JSON.parse(process.env.RESULTS);
+          const icon = { success: "✅", failure: "❌", cancelled: "⏹️", skipped: "⏭️" };
+          console.log("## CI result\n\n| Job | Result |\n|---|---|");
+          for (const [job, { result }] of Object.entries(needs)) console.log(`| ${job} | ${icon[result] ?? result} ${result} |`);
+          EOF
+          echo "$RESULTS" | grep -Eq '"result": "(failure|cancelled)"' && { echo "::error::One or more CI jobs failed"; exit 1; } || echo "All CI jobs passed"
