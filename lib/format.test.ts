@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatDateTime, formatRelative, initials } from "./format";
+import { formatDateTime, formatRelative, formatShortDate, initials } from "./format";
 
 describe("initials", () => {
   it.each([
@@ -36,5 +36,13 @@ describe("formatDateTime", () => {
   it("formats in Australian style, Sydney time", () => {
     // 2026-11-28 00:30 UTC = 11:30 am AEDT
     expect(formatDateTime(new Date("2026-11-28T00:30:00Z"))).toMatch(/^28\/11\/2026, 11:30\s?am$/i);
+  });
+});
+
+describe("formatShortDate", () => {
+  const now = new Date("2026-11-28T00:00:00Z");
+  it("omits the year for this year and includes it otherwise", () => {
+    expect(formatShortDate(new Date("2026-12-02T13:00:00Z"), now)).toBe("3 Dec");
+    expect(formatShortDate(new Date("2027-01-04T13:00:00Z"), now)).toBe("5 Jan 2027");
   });
 });

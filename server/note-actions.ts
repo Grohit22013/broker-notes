@@ -5,11 +5,70 @@ import { redirect } from "next/navigation";
 
 import { requireUser } from "@/lib/auth/session";
 import { db } from "@/lib/db";
+import { parseIsoDate, toIsoDate, zonedMidnight } from "@/lib/dates";
 import { EMPTY_DOC } from "@/lib/notes/content";
-import { noteIdSchema, updateNoteSchema, type UpdateNoteInput } from "@/lib/notes/validation";
+import type { LoanStageValue, NoteTypeValue } from "@/lib/notes/taxonomy";
+import {
+  noteIdSchema,
+  updateNoteMetaSchema,
+  updateNoteSchema,
+  type UpdateNoteInput,
+  type UpdateNoteMetaInput,
+} from "@/lib/notes/validation";
 import { jsonEqual, shouldSnapshot } from "@/lib/notes/versioning";
 
 export type SaveNoteResult = { ok: true; updatedAt: string } | { ok: false; error: string };
+
+/** Serialisable note details, as returned to the client after an update. */
+export type NoteMetaDto = {
+  noteType: NoteTypeValue;
+  loanStage: LoanStageValue | null;
+  tags: string[];
+  followUpDate: string | null; // "YYYY-MM-DD" in the broker's time zone
+  pinned: boolean;
+};
+
+export type SaveNoteMetaResult = { ok: true; meta: NoteMetaDto } | { ok: false; error: string };
+
+/** Updates a note's details (type, stage, tags, follow-up, pin). Only the given fields change. */
+export async function updateNoteMetaAction(
+  input: UpdateNoteMetaInput,
+): Promise<SaveNoteMetaResult> {
+  const user = await requireUser();
+  const parsed = updateNoteMetaSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid details" };
+  }
+  const { id, followUpDate, ...rest } = parsed.data;
+
+  const data: Record<string, unknown> = { ...rest };
+  if (followUpDate !== undefined) {
+    const ymd = followUpDate === null ? null : parseIsoDate(followUpDate);
+    data.followUpAt = ymd ? zonedMidnight(ymd) : null;
+  }
+
+  const { count } = await db.note.updateMany({
+    where: { id, userId: user.id, deletedAt: null },
+    data,
+  });
+  if (count === 0) return { ok: false, error: "Note not found" };
+
+  const note = await db.note.findFirstOrThrow({
+    where: { id, userId: user.id },
+    select: { noteType: true, loanStage: true, tags: true, followUpAt: true, pinned: true },
+  });
+  revalidatePath("/notes");
+  return {
+    ok: true,
+    meta: {
+      noteType: note.noteType,
+      loanStage: note.loanStage,
+      tags: note.tags,
+      followUpDate: note.followUpAt ? toIsoDate(note.followUpAt) : null,
+      pinned: note.pinned,
+    },
+  };
+}
 
 /** Creates an empty note for the signed-in broker and opens it in the editor. */
 export async function createNoteAction(): Promise<never> {

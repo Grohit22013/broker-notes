@@ -4,7 +4,9 @@
  * Creates a throwaway demo account (removed at the end).
  */
 import { chromium, devices, type Page } from "@playwright/test";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, type LoanStage, type NoteType } from "@prisma/client";
+
+import { zonedMidnight, zonedYmd } from "../lib/dates";
 
 const BASE = process.env.BASE_URL ?? "http://localhost:3100";
 const OUT = process.argv[2] ?? "docs/screenshots";
@@ -42,6 +44,83 @@ async function fillDemoNote(page: Page) {
     .waitFor({ timeout: 20_000 });
 }
 
+/** Realistic demo notes with details, so list/filter screenshots look like a real pipeline. */
+async function seedDemoNotes(email: string) {
+  const db = new PrismaClient();
+  const user = await db.user.findUniqueOrThrow({ where: { email } });
+  const today = zonedYmd(new Date());
+  const day = (offset: number) => zonedMidnight({ ...today, day: today.day + offset });
+  const notes: {
+    title: string;
+    text: string;
+    type: NoteType;
+    stage: LoanStage | null;
+    tags: string[];
+    followUp?: Date;
+    pinned?: boolean;
+  }[] = [
+    {
+      title: "Patel – conditions tracker",
+      text: "Valuation ordered with ANZ. Outstanding: payslips, rental ledger, signed contract of sale.",
+      type: "CONDITIONS",
+      stage: "CONDITIONAL",
+      tags: ["anz", "investor"],
+      followUp: day(0),
+      pinned: true,
+    },
+    {
+      title: "Smith – refinance review",
+      text: "Current Westpac rate 6.49%. Comparing CBA offset package and Macquarie basic variable.",
+      type: "REVIEW",
+      stage: "REVIEW",
+      tags: ["refinance"],
+      followUp: day(-2),
+    },
+    {
+      title: "Chen – lender rationale",
+      text: "Recommended NAB: lowest comparison rate for 85% LVR without LMI waiver alternatives.",
+      type: "LENDER_RATIONALE",
+      stage: "APPLICATION",
+      tags: ["best-interests"],
+      followUp: day(5),
+    },
+    {
+      title: "O’Brien – settlement",
+      text: "Settled 14 Nov. Client briefed on repayments and offset account. Annual review booked.",
+      type: "SETTLEMENT",
+      stage: "SETTLED",
+      tags: ["first-home"],
+    },
+    {
+      title: "Kaur – fact find",
+      text: "Two applicants, PAYG and sole trader. HECS debts, one car loan. Target purchase $1.1m.",
+      type: "FACT_FIND",
+      stage: "PRE_APPROVAL",
+      tags: ["self-employed"],
+    },
+  ];
+  for (const [i, n] of notes.entries()) {
+    await db.note.create({
+      data: {
+        userId: user.id,
+        title: n.title,
+        contentText: n.text,
+        contentJson: {
+          type: "doc",
+          content: [{ type: "paragraph", content: [{ type: "text", text: n.text }] }],
+        },
+        noteType: n.type,
+        loanStage: n.stage,
+        tags: n.tags,
+        followUpAt: n.followUp ?? null,
+        pinned: n.pinned ?? false,
+        updatedAt: new Date(Date.now() - (i + 1) * 3_600_000),
+      },
+    });
+  }
+  await db.$disconnect();
+}
+
 async function main() {
   const browser = await chromium.launch();
   const ctx = await browser.newContext({
@@ -69,12 +148,28 @@ async function main() {
   await page.screenshot({ path: `${OUT}/editor-desktop.png` });
   const noteUrl = page.url();
 
+  // Phase 3: details panel on the demo note
+  await page.getByRole("button", { name: /^Details/ }).click();
+  await page.getByRole("dialog").getByLabel("Note type").click();
+  await page.getByRole("option", { name: "Discovery call", exact: true }).click();
+  await page.getByRole("dialog").getByLabel("Loan stage").click();
+  await page.getByRole("option", { name: "Lead", exact: true }).click();
+  await page.getByRole("dialog").getByLabel(/^Tags/).fill("first-home, fhog");
+  await page.getByRole("dialog").getByLabel(/^Tags/).press("Enter");
+  await page.getByRole("dialog").getByText("Saved").waitFor();
+  await page.screenshot({ path: `${OUT}/details-panel-desktop.png` });
+  await page.keyboard.press("Escape");
+
+  await seedDemoNotes(EMAIL);
   await page.goto(`${BASE}/notes`);
   await page
     .getByRole("link", { name: /^Open note:/ })
     .first()
     .waitFor();
   await page.screenshot({ path: `${OUT}/notes-list-desktop.png` });
+  await page.goto(`${BASE}/notes?q=offset`);
+  await page.locator("mark").first().waitFor();
+  await page.screenshot({ path: `${OUT}/notes-search-desktop.png` });
 
   // Mobile, same session
   const storage = await ctx.storageState();
@@ -90,6 +185,11 @@ async function main() {
     .first()
     .waitFor();
   await mp.screenshot({ path: `${OUT}/notes-list-mobile.png` });
+  await mp.getByRole("button", { name: /^Filters/ }).click();
+  await mp.getByRole("dialog").waitFor();
+  await mp.waitForTimeout(400); // let the sheet finish sliding in
+  await mp.screenshot({ path: `${OUT}/notes-filters-mobile.png` });
+  await mp.keyboard.press("Escape");
   await mp.goto(noteUrl);
   await mp.getByRole("textbox", { name: "Note body" }).waitFor();
   await mp.screenshot({ path: `${OUT}/editor-mobile.png` });

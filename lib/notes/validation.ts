@@ -1,6 +1,10 @@
 import { z } from "zod";
 
+import { parseIsoDate } from "@/lib/dates";
+
 import { isDocJson, type DocJson } from "./content";
+import { normalizeTags } from "./tags";
+import { LOAN_STAGE_VALUES, NOTE_TYPE_VALUES } from "./taxonomy";
 
 export const TITLE_MAX = 200;
 /** Plain-text cap (~20k words) — far beyond any real file note. */
@@ -24,3 +28,27 @@ export const updateNoteSchema = z.object({
 });
 
 export type UpdateNoteInput = z.infer<typeof updateNoteSchema>;
+
+/**
+ * Partial update of a note's details (everything except title/body). Omitted fields are
+ * left unchanged; `null` clears loanStage / followUpDate.
+ */
+export const updateNoteMetaSchema = z.object({
+  id: noteIdSchema,
+  noteType: z.enum(NOTE_TYPE_VALUES).optional(),
+  loanStage: z.enum(LOAN_STAGE_VALUES).nullable().optional(),
+  tags: z
+    .array(z.string().max(200))
+    .max(50)
+    .transform((t) => normalizeTags(t))
+    .optional(),
+  /** Calendar date in the broker's time zone, "YYYY-MM-DD". */
+  followUpDate: z
+    .string()
+    .refine((v) => parseIsoDate(v) !== null, { error: "Enter a valid date" })
+    .nullable()
+    .optional(),
+  pinned: z.boolean().optional(),
+});
+
+export type UpdateNoteMetaInput = z.input<typeof updateNoteMetaSchema>;
