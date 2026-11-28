@@ -43,6 +43,7 @@ export type NoteCardData = {
   pinned: boolean;
   finalised: boolean;
   clientName: string | null;
+  caseReference: string | null;
   loanAmount: number | null;
   lvr: number | null;
   /** Shown when someone else wrote the note (null for the viewer's own notes). */
@@ -57,11 +58,14 @@ export function NoteCard({
   note,
   query = "",
   hideClient = false,
+  hideCase = false,
 }: {
   note: NoteCardData;
   query?: string;
   /** On a client page the client name is redundant. */
   hideClient?: boolean;
+  /** On a case page the case reference is redundant. */
+  hideCase?: boolean;
 }) {
   const router = useRouter();
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -99,9 +103,18 @@ export function NoteCard({
             <Highlight text={shownTitle} query={query} />
           </h2>
         </div>
-        {note.clientName && !hideClient ? (
-          <p className="text-primary mt-0.5 truncate text-sm font-medium">
-            <Highlight text={note.clientName} query={query} />
+        {(note.clientName && !hideClient) || (note.caseReference && !hideCase) ? (
+          <p className="mt-0.5 flex min-w-0 items-center gap-2 text-sm">
+            {note.clientName && !hideClient ? (
+              <span className="text-primary truncate font-medium">
+                <Highlight text={note.clientName} query={query} />
+              </span>
+            ) : null}
+            {note.caseReference && !hideCase ? (
+              <span className="text-muted-foreground shrink-0 font-mono text-xs">
+                <Highlight text={note.caseReference} query={query} />
+              </span>
+            ) : null}
           </p>
         ) : null}
 

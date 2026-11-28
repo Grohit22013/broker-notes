@@ -12,7 +12,7 @@ export type AuditEvent = {
   action: AuditAction;
   /** Human-readable one-liner, e.g. "Finalised “Fact find — Nguyen family”". */
   summary: string;
-  entityType?: "note" | "client" | "member" | "invite" | "organisation" | "export";
+  entityType?: "note" | "client" | "case" | "member" | "invite" | "organisation" | "export";
   entityId?: string;
   /** Small structured details only — never note content or personal identifiers. */
   metadata?: Prisma.InputJsonObject;

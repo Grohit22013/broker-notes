@@ -148,7 +148,7 @@ function InviteDialog() {
                 {INVITE_TTL_DAYS} days. For security it won&apos;t be shown again.
               </DialogDescription>
             </DialogHeader>
-            <div className="grid gap-2">
+            <div className="grid min-w-0 grid-cols-1 gap-2">
               <Label htmlFor="invite-link">Invite link</Label>
               <Input
                 id="invite-link"
@@ -180,7 +180,7 @@ function InviteDialog() {
                 They&apos;ll join your brokerage with the role you choose.
               </DialogDescription>
             </DialogHeader>
-            <div className="grid gap-2">
+            <div className="grid min-w-0 grid-cols-1 gap-2">
               <Label htmlFor="invite-email">Email</Label>
               <Input
                 id="invite-email"
@@ -195,7 +195,7 @@ function InviteDialog() {
                 className="h-11 text-base md:text-sm"
               />
             </div>
-            <div className="grid gap-2">
+            <div className="grid min-w-0 grid-cols-1 gap-2">
               <Label htmlFor="invite-role">Role</Label>
               <Select value={role} onValueChange={(v) => setRole(v as RoleValue)}>
                 <SelectTrigger id="invite-role" className="h-11 w-full">

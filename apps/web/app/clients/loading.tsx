@@ -8,7 +8,7 @@ export default function ClientsLoading() {
         <Skeleton className="h-4 w-72 max-w-full" />
       </div>
       <Skeleton className="mb-4 h-10 w-full max-w-md" />
-      <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {Array.from({ length: 6 }, (_, i) => (
           <li key={i} className="flex gap-3 rounded-xl border p-5">
             <Skeleton className="size-10 shrink-0 rounded-full" />

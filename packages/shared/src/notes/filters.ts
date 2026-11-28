@@ -25,6 +25,7 @@ const filtersSchema = z.object({
   type: z.preprocess(first, z.enum(NOTE_TYPE_VALUES).optional().catch(undefined)),
   tag: z.preprocess(first, z.string().trim().min(1).max(30).optional().catch(undefined)),
   client: z.preprocess(first, z.cuid().optional().catch(undefined)),
+  case: z.preprocess(first, z.cuid().optional().catch(undefined)),
   due: z.preprocess(first, z.literal("1").optional().catch(undefined)).transform((v) => v === "1"),
   mine: z.preprocess(first, z.literal("1").optional().catch(undefined)).transform((v) => v === "1"),
   sort: z.preprocess(
@@ -43,6 +44,7 @@ export function parseNoteFilters(
     type: parsed.type,
     tag: parsed.tag,
     client: parsed.client,
+    case: parsed.case,
     due: parsed.due,
     mine: parsed.mine,
     sort: parsed.sort,
@@ -64,6 +66,7 @@ export function buildNoteWhere(scope: NoteScope, f: NoteFilters, now: Date = new
         { title: { contains: f.q, mode: "insensitive" as const } },
         { contentText: { contains: f.q, mode: "insensitive" as const } },
         { client: { name: { contains: f.q, mode: "insensitive" as const } } },
+        { case: { reference: { contains: f.q, mode: "insensitive" as const } } },
       ],
     });
   }
@@ -71,6 +74,7 @@ export function buildNoteWhere(scope: NoteScope, f: NoteFilters, now: Date = new
   if (f.type) and.push({ noteType: f.type });
   if (f.tag) and.push({ tags: { has: f.tag } });
   if (f.client) and.push({ clientId: f.client });
+  if (f.case) and.push({ caseId: f.case });
   if (f.due) and.push({ followUpAt: { lt: startOfNextZonedDay(now) } });
 
   if (f.mine) and.push({ userId: scope.userId });

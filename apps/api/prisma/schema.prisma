@@ -25,6 +25,7 @@ model Organisation {
   members   User[]
   clients   Client[]
   notes     Note[]
+  cases     MortgageCase[]
   invites   Invite[]
   auditLogs AuditLog[]
 }
@@ -53,8 +54,10 @@ model User {
   updatedAt      DateTime     @updatedAt
 
   notes           Note[]
-  clients         Client[]   @relation("ClientCreatedBy")
-  assignedClients Client[]   @relation("ClientAdviser")
+  clients         Client[]       @relation("ClientCreatedBy")
+  assignedClients Client[]       @relation("ClientAdviser")
+  casesCreated    MortgageCase[] @relation("CaseCreatedBy")
+  assignedCases   MortgageCase[] @relation("CaseAdviser")
   aiUsages        AiUsage[]
   invitesSent     Invite[]
   auditLogs       AuditLog[]
@@ -136,6 +139,7 @@ model Client {
   updatedAt         DateTime     @updatedAt
 
   notes Note[]
+  cases MortgageCase[]
 
   @@unique([organisationId, email])
   @@index([organisationId, name])
@@ -143,32 +147,35 @@ model Client {
 
 /// A file note. Rich text is stored as Tiptap JSON; plain text is kept for search/snippets.
 model Note {
-  id             String       @id @default(cuid())
+  id             String        @id @default(cuid())
   organisationId String
-  organisation   Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  organisation   Organisation  @relation(fields: [organisationId], references: [id], onDelete: Cascade)
   /// The author. Only the author or an organisation admin may change the note.
   userId         String
-  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  title          String       @default("")
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title          String        @default("")
   /// Tiptap/ProseMirror document JSON.
   contentJson    Json
   /// Plain-text projection of contentJson (search + list snippets).
-  contentText    String       @default("")
+  contentText    String        @default("")
   /// What kind of file note this is (drives templates and filtering).
-  noteType       NoteType     @default(GENERAL)
+  noteType       NoteType      @default(GENERAL)
   /// Where the client's loan is in the pipeline when this note was written (optional).
   loanStage      LoanStage?
   /// Free-form labels, e.g. "first-home-buyer", "refinance". De-duplicated case-insensitively.
-  tags           String[]     @default([])
+  tags           String[]      @default([])
   /// When the broker needs to follow up (call back, chase documents, review).
   followUpAt     DateTime?
-  pinned         Boolean      @default(false)
+  pinned         Boolean       @default(false)
+  /// The mortgage case this note belongs to (its client is then the case's client).
+  caseId         String?
+  case           MortgageCase? @relation(fields: [caseId], references: [id], onDelete: SetNull)
   clientId       String?
-  client         Client?      @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  client         Client?       @relation(fields: [clientId], references: [id], onDelete: SetNull)
   /// Key loan figures (loan amount, property value, income, rate, lender) — validated by Zod.
   keyFigures     Json?
   /// DRAFT notes are editable; FINALISED notes are locked and only accept amendments.
-  status         NoteStatus   @default(DRAFT)
+  status         NoteStatus    @default(DRAFT)
   finalisedAt    DateTime?
   /// Latest AI analysis (draft suggestions — never applied without the broker's click).
   aiAnalysis     Json?
@@ -176,8 +183,8 @@ model Note {
   aiInputHash    String?
   aiAnalysedAt   DateTime?
   aiModel        String?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
   /// Soft delete — file notes are compliance records, so we never hard-delete.
   deletedAt      DateTime?
 
@@ -188,6 +195,7 @@ model Note {
   @@index([organisationId, followUpAt])
   @@index([userId])
   @@index([clientId])
+  @@index([caseId])
 }
 
 enum NoteStatus {
@@ -237,4 +245,59 @@ model NoteVersion {
   createdAt   DateTime @default(now())
 
   @@index([noteId, createdAt(sort: Desc)])
+}
+
+/// The nine-stage mortgage pipeline (research doc §6.5), in Australian terms.
+enum CaseStage {
+  ENQUIRY
+  FACT_FIND
+  RESEARCH
+  RECOMMENDATION
+  LODGED
+  ASSESSMENT
+  APPROVED
+  SETTLED
+  CLOSED
+}
+
+enum CaseType {
+  FIRST_HOME
+  PURCHASE
+  REFINANCE
+  INVESTMENT
+  TOP_UP
+  CONSTRUCTION
+  PRODUCT_SWITCH
+}
+
+/// One client's loan deal moving through the pipeline. Notes can be linked to a case.
+model MortgageCase {
+  id                String       @id @default(cuid())
+  organisationId    String
+  organisation      Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  clientId          String
+  client            Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  /// "HL-2026-0007": unique per brokerage, assigned on creation.
+  reference         String
+  type              CaseType
+  stage             CaseStage    @default(ENQUIRY)
+  stageChangedAt    DateTime     @default(now())
+  lender            String?
+  /// The lender's own application number.
+  lenderReference   String?
+  /// Whole Australian dollars.
+  loanAmount        Int?
+  propertyValue     Int?
+  assignedAdviserId String?
+  assignedAdviser   User?        @relation("CaseAdviser", fields: [assignedAdviserId], references: [id], onDelete: SetNull)
+  createdById       String
+  createdBy         User         @relation("CaseCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  notes Note[]
+
+  @@unique([organisationId, reference])
+  @@index([organisationId, stage])
+  @@index([clientId])
 }

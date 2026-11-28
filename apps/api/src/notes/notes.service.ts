@@ -46,7 +46,7 @@ const EXPORT_LIMIT = 5000;
 const FINALISED_MESSAGE = "This note is finalised. Add an amendment instead of editing it.";
 const NOT_AUTHOR_MESSAGE = "Only the note's author or a brokerage admin can change this note.";
 
-const listSelect = {
+export const listSelect = {
   id: true,
   title: true,
   contentText: true,
@@ -61,11 +61,12 @@ const listSelect = {
   keyFigures: true,
   client: { select: { id: true, name: true } },
   user: { select: { id: true, name: true } },
+  case: { select: { id: true, reference: true } },
 } satisfies Prisma.NoteSelect;
 
 type ListRow = Prisma.NoteGetPayload<{ select: typeof listSelect }>;
 
-function toListItem(r: ListRow): NoteListItemDto {
+export function toListItem(r: ListRow): NoteListItemDto {
   return {
     id: r.id,
     title: r.title,
@@ -81,6 +82,7 @@ function toListItem(r: ListRow): NoteListItemDto {
     keyFigures: parseKeyFigures(r.keyFigures),
     client: r.client,
     author: r.user,
+    case: r.case,
   };
 }
 
@@ -114,6 +116,7 @@ export class NotesService {
         status: true,
         contentJson: true,
         versions: { orderBy: { createdAt: "desc" }, take: 1, select: { createdAt: true } },
+        case: { select: { clientId: true } },
       },
     });
     if (!note) throw new NotFoundException("Note not found");
@@ -173,7 +176,21 @@ export class NotesService {
     };
   }
 
-  async create(actor: SessionUser, templateId: string, clientId?: string): Promise<CreatedNoteDto> {
+  async create(
+    actor: SessionUser,
+    templateId: string,
+    requestedClientId?: string,
+    caseId?: string,
+  ): Promise<CreatedNoteDto> {
+    const linkedCase = caseId
+      ? await this.db.mortgageCase.findFirst({
+          where: { id: caseId, organisationId: actor.organisationId },
+          select: { id: true, clientId: true },
+        })
+      : null;
+    if (caseId && !linkedCase) throw new NotFoundException("Case not found");
+    // A case belongs to one client, so the case decides the client.
+    const clientId = linkedCase?.clientId ?? requestedClientId;
     const client = clientId
       ? await this.db.client.findFirst({
           where: { id: clientId, organisationId: actor.organisationId },
@@ -191,6 +208,7 @@ export class NotesService {
           contentJson,
           noteType,
           clientId: client?.id ?? null,
+          caseId: linkedCase?.id ?? null,
           versions: { create: { title, contentJson } },
         },
         select: { id: true },
@@ -250,7 +268,7 @@ export class NotesService {
     const provided = Object.keys(input).filter((k) => input[k as keyof MetaInput] !== undefined);
     if (lockedFieldIn(current.status, provided)) throw new ConflictException(FINALISED_MESSAGE);
 
-    const { followUpDate, keyFigures, clientId, ...rest } = input;
+    const { followUpDate, keyFigures, clientId, caseId, ...rest } = input;
     if (clientId) {
       const owns = await this.db.client.count({
         where: { id: clientId, organisationId: actor.organisationId },
@@ -263,7 +281,24 @@ export class NotesService {
       const ymd = followUpDate === null ? null : parseIsoDate(followUpDate);
       data.followUpAt = ymd ? zonedMidnight(ymd) : null;
     }
-    if (clientId !== undefined) data.clientId = clientId;
+    if (clientId !== undefined) {
+      data.clientId = clientId;
+      // Moving the note to another client unlinks a case that belongs to the old one.
+      if (caseId === undefined && current.case && current.case.clientId !== clientId) {
+        data.caseId = null;
+      }
+    }
+    if (caseId) {
+      const linked = await this.db.mortgageCase.findFirst({
+        where: { id: caseId, organisationId: actor.organisationId },
+        select: { clientId: true },
+      });
+      if (!linked) throw new NotFoundException("Case not found");
+      data.caseId = caseId;
+      data.clientId = linked.clientId;
+    } else if (caseId === null) {
+      data.caseId = null;
+    }
     if (keyFigures !== undefined) {
       const cleaned = keyFigures ? clean(keyFigures) : {};
       data.keyFigures = Object.keys(cleaned).length ? cleaned : Prisma.DbNull;
@@ -301,6 +336,7 @@ export class NotesService {
         status: true,
         keyFigures: true,
         client: { select: { id: true, name: true } },
+        case: { select: { id: true, reference: true } },
       },
     });
     if (!n) throw new NotFoundException("Note not found");
@@ -312,6 +348,8 @@ export class NotesService {
       pinned: n.pinned,
       clientId: n.client?.id ?? null,
       clientName: n.client?.name ?? null,
+      caseId: n.case?.id ?? null,
+      caseReference: n.case?.reference ?? null,
       keyFigures: parseKeyFigures(n.keyFigures),
       status: n.status,
     };

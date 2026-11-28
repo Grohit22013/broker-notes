@@ -16,6 +16,7 @@ import { NotesService } from "../notes/notes.service";
 const NOTE_HEADERS = [
   "Title",
   "Client",
+  "Case",
   "Author",
   "Note type",
   "Loan stage",
@@ -63,6 +64,7 @@ export class ExportController {
         return [
           n.title || "Untitled note",
           n.client?.name ?? "",
+          n.case?.reference ?? "",
           n.user.name,
           noteTypeLabel(n.noteType),
           n.loanStage ? loanStage(n.loanStage).label : "",

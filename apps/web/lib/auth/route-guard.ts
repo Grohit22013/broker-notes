@@ -1,5 +1,11 @@
 /** Route prefixes that require a signed-in broker. */
-export const PROTECTED_PREFIXES = ["/notes", "/clients", "/settings"] as const;
+export const PROTECTED_PREFIXES = [
+  "/dashboard",
+  "/notes",
+  "/cases",
+  "/clients",
+  "/settings",
+] as const;
 const AUTH_PAGES = ["/login", "/register"] as const;
 
 const matches = (pathname: string, prefix: string) =>
@@ -10,7 +16,7 @@ export type RouteDecision = { action: "next" } | { action: "redirect"; to: strin
 /**
  * Pure routing rule used by the middleware:
  * - signed-out visits to protected pages → /login?callbackUrl=<relative path>
- * - signed-in visits to /login or /register → /notes
+ * - signed-in visits to /login or /register → /dashboard
  * The callbackUrl is relative so `safeRedirect` (which rejects absolute URLs) accepts it.
  */
 export function routeDecision(pathname: string, search: string, signedIn: boolean): RouteDecision {
@@ -20,7 +26,7 @@ export function routeDecision(pathname: string, search: string, signedIn: boolea
     return { action: "redirect", to: `/login?${params.toString()}` };
   }
   if (signedIn && AUTH_PAGES.some((p) => matches(pathname, p))) {
-    return { action: "redirect", to: "/notes" };
+    return { action: "redirect", to: "/dashboard" };
   }
   return { action: "next" };
 }

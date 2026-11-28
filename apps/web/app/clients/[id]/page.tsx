@@ -1,15 +1,26 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft, FileText, Mail, Pencil, Phone, Plus, UserRoundCheck } from "lucide-react";
+import {
+  Briefcase,
+  ChevronLeft,
+  FileText,
+  Mail,
+  Pencil,
+  Phone,
+  Plus,
+  UserRoundCheck,
+} from "lucide-react";
 
 import { ClientFormDialog } from "@/components/clients/client-form-dialog";
 import { NoteCard } from "@/components/notes/note-card";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser, requireUser } from "@/lib/auth/session";
-import { activeMembers, getClient } from "@/lib/api/queries";
-import { canManageClients } from "@broker-notes/shared/orgs/roles";
+import { activeMembers, getClient, listCases } from "@/lib/api/queries";
+import { CaseCard } from "@/components/cases/case-card";
+import { CaseFormDialog } from "@/components/cases/case-form-dialog";
+import { canManageCases, canManageClients } from "@broker-notes/shared/orgs/roles";
 import { formatDateTime, initials } from "@/lib/format";
 import { parseNoteFilters } from "@broker-notes/shared/notes/filters";
 import { listNotes } from "@/lib/api/queries";
@@ -35,7 +46,11 @@ export default async function ClientPage({ params }: Props) {
   if (!client) notFound();
 
   // Timeline: this client's notes (everyone in the brokerage), newest first, pinned on top.
-  const notes = await listNotes(parseNoteFilters({ client: client.id }));
+  const [notes, cases] = await Promise.all([
+    listNotes(parseNoteFilters({ client: client.id })),
+    listCases({ client: client.id, status: "all" }),
+  ]);
+  const canOpenCase = canManageCases(user);
 
   return (
     <div className="container-page">
@@ -46,7 +61,7 @@ export default async function ClientPage({ params }: Props) {
       </Button>
 
       <div className="flex flex-col gap-4 py-4 sm:flex-row sm:items-center sm:justify-between md:py-6">
-        <div className="flex items-center gap-4">
+        <div className="flex min-w-0 items-center gap-4">
           <span className="bg-primary/10 text-primary grid size-14 shrink-0 place-items-center rounded-full text-lg font-semibold">
             {initials(client.name)}
           </span>
@@ -107,6 +122,37 @@ export default async function ClientPage({ params }: Props) {
         </div>
       </div>
 
+      <section aria-labelledby="client-cases" className="mb-8">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 id="client-cases" className="text-lg font-semibold">
+            Cases <span className="text-muted-foreground font-normal">({cases.length})</span>
+          </h2>
+          {canOpenCase ? (
+            <CaseFormDialog
+              clients={[{ id: client.id, name: client.name }]}
+              defaultClientId={client.id}
+              advisers={advisers}
+              trigger={
+                <Button variant="outline" className="h-10">
+                  <Briefcase className="size-4" aria-hidden /> New case
+                </Button>
+              }
+            />
+          ) : null}
+        </div>
+        {cases.length === 0 ? (
+          <p className="text-muted-foreground bg-card rounded-xl border p-4 text-sm">
+            No cases yet. A case tracks one loan from enquiry to settlement.
+          </p>
+        ) : (
+          <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {cases.map((c) => (
+              <CaseCard key={c.id} item={c} hideClient />
+            ))}
+          </ul>
+        )}
+      </section>
+
       <h2 className="mb-3 text-lg font-semibold">
         File notes <span className="text-muted-foreground font-normal">({notes.length})</span>
       </h2>
@@ -117,12 +163,12 @@ export default async function ClientPage({ params }: Props) {
           description="Start with a discovery call or fact find template."
           action={
             <Button asChild>
-              <Link href={`/notes/new?client=${client.id}`}>New note for {client.name}</Link>
+              <Link href={`/notes/new?client=${client.id}`}>Write the first note</Link>
             </Button>
           }
         />
       ) : (
-        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {notes.map((n) => (
             <NoteCard key={n.id} note={toNoteCardData(n, user)} hideClient />
           ))}

@@ -19,7 +19,8 @@ export const ROLES = [
   {
     value: "CASE_MANAGER",
     label: "Case manager",
-    description: "Supports advisers: reads the brokerage's notes and writes their own updates.",
+    description:
+      "Supports advisers: reads the brokerage's notes, writes their own updates and moves cases through the pipeline.",
   },
 ] as const;
 
@@ -41,6 +42,16 @@ export function canEditNote(actor: Actor, authorId: string): boolean {
 /** Creating, editing and importing client records. */
 export function canManageClients(actor: Actor): boolean {
   return actor.role === "ADMIN" || actor.role === "ADVISER";
+}
+
+/** Opening mortgage cases and editing their details (type, lender, amounts, adviser). */
+export function canManageCases(actor: Actor): boolean {
+  return actor.role === "ADMIN" || actor.role === "ADVISER";
+}
+
+/** Moving a case through the pipeline: everyone, since case managers track progress. */
+export function canMoveCaseStage(_actor: Actor): boolean {
+  return true;
 }
 
 /** Bulk CSV export of the brokerage's notes or clients. */

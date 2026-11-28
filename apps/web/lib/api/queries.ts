@@ -2,6 +2,10 @@ import "server-only";
 
 import type {
   AuditPageDto,
+  CaseDetailDto,
+  CaseListItemDto,
+  CaseOptionDto,
+  DashboardDto,
   ClientDetailDto,
   ClientListItemDto,
   NoteDetailDto,
@@ -41,6 +45,23 @@ export const getClient = (id: string) =>
 export const existingClientEmails = () => apiGet<string[]>("/clients/emails");
 
 export const getOrganisation = () => apiGet<OrganisationDto>("/organisation");
+
+export const getDashboard = () => apiGet<DashboardDto>("/dashboard");
+
+/** Cases, filtered like the /cases page URL (q, stage, client, status, mine). */
+export function listCases(params: Record<string, string | undefined> = {}) {
+  const qs = new URLSearchParams(
+    Object.entries(params).filter((e): e is [string, string] => Boolean(e[1])),
+  ).toString();
+  return apiGet<CaseListItemDto[]>(`/cases${qs ? `?${qs}` : ""}`);
+}
+
+export const getCase = (id: string) => apiGet<CaseDetailDto>(`/cases/${encodeURIComponent(id)}`);
+
+export const caseOptions = (clientId?: string) =>
+  apiGet<CaseOptionDto[]>(
+    `/cases/options${clientId ? `?client=${encodeURIComponent(clientId)}` : ""}`,
+  );
 
 /** Active members (for "assigned adviser" pickers). */
 export const activeMembers = () => apiGet<UserRefDto[]>("/organisation/members");

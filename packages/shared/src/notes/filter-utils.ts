@@ -12,6 +12,8 @@ export type NoteFilters = {
   tag?: string;
   /** Only notes linked to this client (cuid). */
   client?: string;
+  /** Only notes linked to this mortgage case (cuid). */
+  case?: string;
   /** Only notes whose follow-up is today or overdue. */
   due: boolean;
   /** Only notes written by the signed-in member ("Created by me"). */
@@ -30,6 +32,7 @@ export function filtersToSearchParams(filters: Partial<NoteFilters>): URLSearchP
   if (filters.type) p.set("type", filters.type);
   if (filters.tag) p.set("tag", filters.tag);
   if (filters.client) p.set("client", filters.client);
+  if (filters.case) p.set("case", filters.case);
   if (filters.due) p.set("due", "1");
   if (filters.mine) p.set("mine", "1");
   if (filters.sort && filters.sort !== DEFAULT_SORT) p.set("sort", filters.sort);
@@ -38,8 +41,9 @@ export function filtersToSearchParams(filters: Partial<NoteFilters>): URLSearchP
 
 /** Number of active filters (search and sort excluded) — shown on the mobile "Filters" button. */
 export function activeFilterCount(f: NoteFilters): number {
-  return [f.stage, f.type, f.tag, f.client, f.due || undefined, f.mine || undefined].filter(Boolean)
-    .length;
+  return [f.stage, f.type, f.tag, f.client, f.case, f.due || undefined, f.mine || undefined].filter(
+    Boolean,
+  ).length;
 }
 
 export function hasAnyFilter(f: NoteFilters): boolean {

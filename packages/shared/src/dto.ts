@@ -3,6 +3,7 @@
  * Dates are ISO-8601 strings on the wire.
  */
 import type { Analysis } from "./ai/analysis";
+import type { CaseStageValue, CaseTypeValue } from "./cases/taxonomy";
 import type { RedactionCounts } from "./ai/redact";
 import type { DocJson } from "./notes/content";
 import type { NoteStatusValue } from "./notes/finalise";
@@ -39,6 +40,7 @@ export type NoteMetaFieldsDto = {
   status: NoteStatusValue;
   keyFigures: KeyFigures;
   client: ClientRefDto | null;
+  case: CaseRefDto | null;
 };
 
 export type NoteListItemDto = NoteMetaFieldsDto & {
@@ -72,6 +74,8 @@ export type NoteMetaDto = {
   pinned: boolean;
   clientId: string | null;
   clientName: string | null;
+  caseId: string | null;
+  caseReference: string | null;
   keyFigures: KeyFigures;
   status: NoteStatusValue;
 };
@@ -182,3 +186,53 @@ export type AuditEntryDto = {
 };
 
 export type AuditPageDto = { items: AuditEntryDto[]; nextCursor: string | null };
+
+// ── Mortgage cases & dashboard (Phase 9) ─────────────────────────────────────
+
+export type { CaseStageValue, CaseTypeValue };
+
+export type CaseRefDto = { id: string; reference: string };
+
+/** For pickers: reference plus enough context to choose the right one. */
+export type CaseOptionDto = CaseRefDto & {
+  clientId: string;
+  clientName: string;
+  type: CaseTypeValue;
+  stage: CaseStageValue;
+};
+
+export type CaseListItemDto = CaseRefDto & {
+  type: CaseTypeValue;
+  stage: CaseStageValue;
+  lender: string | null;
+  loanAmount: number | null;
+  propertyValue: number | null;
+  client: ClientRefDto;
+  assignedAdviser: UserRefDto | null;
+  noteCount: number;
+  stageChangedAt: string;
+  updatedAt: string;
+};
+
+export type CaseDetailDto = CaseListItemDto & {
+  lenderReference: string | null;
+  createdAt: string;
+  createdBy: UserRefDto;
+};
+
+export type DashboardDto = {
+  counts: {
+    notes: number;
+    myNotes: number;
+    followUpsDue: number;
+    openCases: number;
+    myOpenCases: number;
+  };
+  pinned: NoteListItemDto[];
+  recent: NoteListItemDto[];
+  followUps: NoteListItemDto[];
+  /** Open cases per stage, in pipeline order. */
+  pipeline: { stage: CaseStageValue; count: number }[];
+  /** Clients with the most recent note activity. */
+  recentClients: (ClientRefDto & { lastNoteAt: string; noteCount: number })[];
+};

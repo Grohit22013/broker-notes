@@ -13,6 +13,7 @@ import {
 import { useRouter } from "next/navigation";
 import {
   Banknote,
+  Briefcase,
   Check,
   Loader2,
   Lock,
@@ -65,6 +66,10 @@ import {
 } from "@broker-notes/shared/notes/taxonomy";
 import { cn } from "@/lib/utils";
 import { createClientAction } from "@/lib/api/actions";
+import { loadCaseOptions } from "@/lib/api/case-actions";
+import { CaseRefBadge } from "@/components/cases/case-badges";
+import { caseStage, caseTypeLabel } from "@broker-notes/shared/cases/taxonomy";
+import type { CaseOptionDto } from "@broker-notes/shared/dto";
 import { updateNoteMetaAction, type NoteMetaDto } from "@/lib/api/actions";
 
 type Patch = Partial<NoteMetaDto>;
@@ -218,6 +223,9 @@ export function NoteDetailsSummary() {
         <>
           {meta.pinned ? <PinnedMark /> : null}
           {meta.clientName ? <ClientBadge name={meta.clientName} /> : null}
+          {meta.caseId && meta.caseReference ? (
+            <CaseRefBadge id={meta.caseId} reference={meta.caseReference} asLink={false} />
+          ) : null}
           <TypeBadge type={meta.noteType} />
           {meta.loanStage ? <StageBadge stage={meta.loanStage} /> : null}
           {k.loanAmount ? (
@@ -289,6 +297,7 @@ export function NoteDetailsSheet() {
           ) : null}
 
           <ClientField />
+          <CaseField />
 
           <Field label="Note type" htmlFor={`${ids}-type`}>
             <Select
@@ -427,7 +436,12 @@ function ClientField() {
           onValueChange={(v) => {
             if (v === NEW_CLIENT) return setCreating(true);
             const c = clients.find((x) => x.id === v);
-            update({ clientId: c?.id ?? null, clientName: c?.name ?? null });
+            // A case belongs to one client: switching client drops a case of the old one.
+            update({
+              clientId: c?.id ?? null,
+              clientName: c?.name ?? null,
+              ...(meta.caseId ? { caseId: null, caseReference: null } : {}),
+            });
           }}
         >
           <SelectTrigger id={id} className="h-11 w-full">
@@ -452,6 +466,76 @@ function ClientField() {
           </SelectContent>
         </Select>
       )}
+    </Field>
+  );
+}
+
+/** Links the note to a mortgage case (which also sets the client). */
+function CaseField() {
+  const { meta, update, locked } = useNoteDetails();
+  const id = useId();
+  const [options, setOptions] = useState<CaseOptionDto[] | null>(null);
+
+  // Cases of the chosen client (or all cases when no client is set yet).
+  useEffect(() => {
+    let live = true;
+    setOptions(null);
+    void loadCaseOptions(meta.clientId ?? undefined).then((o) => live && setOptions(o));
+    return () => {
+      live = false;
+    };
+  }, [meta.clientId]);
+
+  const list = options ?? [];
+  // Keep the current case selectable even before options load.
+  const current =
+    meta.caseId && !list.some((o) => o.id === meta.caseId) && meta.caseReference
+      ? [{ id: meta.caseId, reference: meta.caseReference }]
+      : [];
+
+  return (
+    <Field label="Case" htmlFor={id}>
+      <Select
+        value={meta.caseId ?? NONE}
+        disabled={locked}
+        onValueChange={(v) => {
+          if (v === NONE) return update({ caseId: null, caseReference: null });
+          const c = list.find((x) => x.id === v);
+          if (!c) return;
+          update({
+            caseId: c.id,
+            caseReference: c.reference,
+            clientId: c.clientId,
+            clientName: c.clientName,
+          });
+        }}
+      >
+        <SelectTrigger id={id} className="h-11 w-full">
+          <span className="flex items-center gap-2 truncate">
+            <Briefcase className="text-muted-foreground size-4 shrink-0" aria-hidden />
+            <SelectValue />
+          </span>
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={NONE}>No case</SelectItem>
+          {current.map((c) => (
+            <SelectItem key={c.id} value={c.id}>
+              {c.reference}
+            </SelectItem>
+          ))}
+          {list.map((c) => (
+            <SelectItem key={c.id} value={c.id}>
+              {c.reference} · {caseTypeLabel(c.type)}
+              {meta.clientId ? "" : ` · ${c.clientName}`} ({caseStage(c.stage).label})
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {options && options.length === 0 && !meta.caseId ? (
+        <p className="text-muted-foreground text-xs">
+          {meta.clientId ? "This client has no cases yet." : "No cases yet."}
+        </p>
+      ) : null}
     </Field>
   );
 }
@@ -644,7 +728,7 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <div className="grid gap-2">
+    <div className="grid min-w-0 grid-cols-1 gap-2">
       <Label htmlFor={htmlFor}>{label}</Label>
       {children}
     </div>
