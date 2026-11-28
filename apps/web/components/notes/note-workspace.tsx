@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ChevronLeft, LockKeyhole } from "lucide-react";
 
 import { NoteEditor, type NoteEditorApi } from "@/components/editor/note-editor";
+import { AiPanel } from "@/components/notes/ai-panel";
 import { Amendments, type AmendmentView } from "@/components/notes/amendments";
 import { FinaliseButton } from "@/components/notes/finalise-button";
 import { NoteActionsMenu } from "@/components/notes/note-actions-menu";
@@ -49,6 +50,7 @@ export function NoteWorkspace(props: Props) {
               Created {formatDateTime(new Date(props.createdAt))}
             </span>
             <NoteDetailsButton />
+            <AiPanel noteId={noteId} editorApi={editorApi} finalised={finalised} />
             <VersionHistory noteId={noteId} canRestore={!finalised} editorApi={editorApi} />
             {finalised ? null : (
               <FinaliseButton noteId={noteId} beforeFinalise={() => editorApi?.flush()} />
