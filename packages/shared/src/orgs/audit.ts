@@ -4,7 +4,11 @@ export const AUDIT_CATEGORIES = [
   { value: "client", label: "Clients", prefixes: ["client.", "clients."] },
   { value: "case", label: "Cases", prefixes: ["case."] },
   { value: "task", label: "Tasks", prefixes: ["task."] },
-  { value: "team", label: "Team & settings", prefixes: ["member.", "invite.", "organisation."] },
+  {
+    value: "team",
+    label: "Team & settings",
+    prefixes: ["member.", "invite.", "organisation.", "template."],
+  },
   { value: "export", label: "Exports", prefixes: ["export."] },
   { value: "ai", label: "AI assist", prefixes: ["ai."] },
   { value: "auth", label: "Sign-ins", prefixes: ["auth."] },
@@ -27,6 +31,8 @@ export type AuditAction =
   | "member.deactivated"
   | "member.reactivated"
   | "invite.revoked"
+  | "template.created"
+  | "template.removed"
   | "note.created"
   | "note.details_updated"
   | "note.finalised"

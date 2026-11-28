@@ -28,7 +28,24 @@ export type AuthUserDto = {
 export type UserRefDto = { id: string; name: string };
 
 /** Error body for every non-2xx response. `field` names the input the message is about, if any. */
-export type ApiErrorBody = { statusCode: number; message: string; field?: string };
+export type ApiErrorBody = {
+  statusCode: number;
+  message: string;
+  field?: string;
+  /** Machine-readable reason, e.g. "NOTE_CONFLICT". */
+  code?: string;
+  /** For NOTE_CONFLICT: the version that's now on the server. */
+  latest?: NoteConflictDto;
+};
+
+/** The server's current version of a note, returned when a save would overwrite newer changes. */
+export type NoteConflictDto = {
+  revision: number;
+  title: string;
+  contentJson: DocJson;
+  updatedAt: string;
+  updatedBy: string | null;
+};
 
 export type ClientRefDto = { id: string; name: string };
 
@@ -48,6 +65,8 @@ export type NoteListItemDto = NoteMetaFieldsDto & {
   id: string;
   /** Who wrote the note — only they or an admin may change it. */
   author: UserRefDto;
+  /** Starred by the signed-in member. */
+  favourite: boolean;
   title: string;
   contentText: string;
   createdAt: string;
@@ -58,6 +77,8 @@ export type AmendmentDto = { id: string; body: string; createdAt: string };
 
 export type NoteDetailDto = NoteListItemDto & {
   contentJson: DocJson;
+  /** Increases with every content save; sent back as baseRevision to detect conflicts. */
+  revision: number;
   finalisedAt: string | null;
   amendments: AmendmentDto[];
 };
@@ -81,7 +102,7 @@ export type NoteMetaDto = {
   status: NoteStatusValue;
 };
 
-export type SavedNoteDto = { updatedAt: string };
+export type SavedNoteDto = { updatedAt: string; revision: number };
 export type CreatedNoteDto = { id: string };
 
 export type VersionDto = { id: string; title: string; createdAt: string };
@@ -266,3 +287,17 @@ export type TaskDto = {
 };
 
 export type TaskBatchResultDto = { created: number; tasks: TaskDto[] };
+
+// ── Editor & reliability (Phase 11) ──────────────────────────────────────────
+
+/** One of the brokerage's own templates (built-ins live in notes/templates). */
+export type OrgTemplateDto = {
+  id: string;
+  name: string;
+  description: string | null;
+  noteType: NoteTypeValue;
+  createdBy: UserRefDto;
+  createdAt: string;
+  /** Creator or admin may remove it. */
+  canRemove: boolean;
+};

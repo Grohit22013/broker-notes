@@ -25,6 +25,11 @@ export const updateNoteSchema = z.object({
   title: z.string().max(TITLE_MAX, `Title must be ${TITLE_MAX} characters or fewer`),
   contentJson,
   contentText: z.string().max(CONTENT_TEXT_MAX, "This note is too long to save"),
+  /**
+   * The revision these edits were made on. If the note has moved on since (another tab or member
+   * saved), the save is refused with 409 instead of overwriting their changes.
+   */
+  baseRevision: z.number().int().min(0).optional(),
 });
 
 export type UpdateNoteInput = z.infer<typeof updateNoteSchema>;
@@ -67,7 +72,29 @@ export const amendmentSchema = z.object({
 });
 
 export const noteTemplateSchema = z.object({
+  /** A built-in template id, or the id (cuid) of one of the brokerage's own templates. */
   templateId: z.string().max(40).default("blank"),
   clientId: z.cuid().optional().catch(undefined),
   caseId: z.cuid().optional().catch(undefined),
 });
+
+/** Save a note's current structure as one of the brokerage's own templates. */
+export const createOrgTemplateSchema = z.object({
+  noteId: noteIdSchema,
+  name: z
+    .string({ error: "Give the template a name" })
+    .trim()
+    .min(2, "Give the template a name")
+    .max(60, "Template names must be 60 characters or fewer"),
+  description: z
+    .string()
+    .trim()
+    .max(200, "Descriptions must be 200 characters or fewer")
+    .transform((v) => v || null)
+    .nullable()
+    .optional(),
+  /** Default title; "{client}" becomes the client's name. */
+  title: z.string().trim().max(120).optional(),
+});
+
+export type CreateOrgTemplateInput = z.input<typeof createOrgTemplateSchema>;
