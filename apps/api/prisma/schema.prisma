@@ -1,5 +1,6 @@
 // Prisma schema for BrokerNotes.
-// Models are added phase by phase (User in Phase 1, Note in Phase 2, Client in Phase 4).
+// Models are added phase by phase (User in Phase 1, Note in Phase 2, Client in Phase 4,
+// Organisation / roles / audit log in Phase 8).
 
 generator client {
   provider = "prisma-client-js"
@@ -13,20 +14,94 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-/// A broker account. Every note and client belongs to exactly one user.
-model User {
-  id           String   @id @default(cuid())
-  name         String
-  /// Always stored lower-cased and trimmed.
-  email        String   @unique
-  /// bcrypt hash — the plain password is never stored.
-  passwordHash String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+/// A brokerage. Every client, note, invite and audit entry belongs to exactly one organisation,
+/// and the API scopes every query by it (multi-tenancy).
+model Organisation {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  notes    Note[]
-  clients  Client[]
-  aiUsages AiUsage[]
+  members   User[]
+  clients   Client[]
+  notes     Note[]
+  invites   Invite[]
+  auditLogs AuditLog[]
+}
+
+/// What a member may do inside their organisation (see packages/shared/src/orgs/permissions.ts).
+enum Role {
+  ADMIN
+  ADVISER
+  CASE_MANAGER
+}
+
+/// A member of a brokerage. Users are deactivated, never deleted, so authorship stays intact.
+model User {
+  id             String       @id @default(cuid())
+  name           String
+  /// Always stored lower-cased and trimmed.
+  email          String       @unique
+  /// bcrypt hash — the plain password is never stored.
+  passwordHash   String
+  organisationId String
+  organisation   Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  role           Role         @default(ADVISER)
+  /// Set when an admin deactivates the member: they can no longer sign in or use the API.
+  deactivatedAt  DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  notes           Note[]
+  clients         Client[]   @relation("ClientCreatedBy")
+  assignedClients Client[]   @relation("ClientAdviser")
+  aiUsages        AiUsage[]
+  invitesSent     Invite[]
+  auditLogs       AuditLog[]
+
+  @@index([organisationId])
+}
+
+/// A single-use, expiring invitation to join an organisation. Only a hash of the token is stored.
+model Invite {
+  id             String       @id @default(cuid())
+  organisationId String
+  organisation   Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  /// The invitee must register with exactly this (lower-cased) email.
+  email          String
+  role           Role
+  /// SHA-256 of the token in the invite link.
+  tokenHash      String       @unique
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+  revokedAt      DateTime?
+  invitedById    String
+  invitedBy      User         @relation(fields: [invitedById], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+
+  @@index([organisationId, createdAt(sort: Desc)])
+}
+
+/// Append-only record of important actions (who did what, when) — admins can review it.
+model AuditLog {
+  id             String       @id @default(cuid())
+  organisationId String
+  organisation   Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  /// Who did it (null if that user record is ever removed).
+  userId         String?
+  user           User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  /// Dotted action name, e.g. "note.finalised", "member.role_changed".
+  action         String
+  entityType     String?
+  entityId       String?
+  /// Human-readable one-liner shown in the log ("Finalised “Fact find — Nguyen family”").
+  summary        String
+  /// Small structured details (changed fields, old/new role, counts). Never note content.
+  metadata       Json?
+  createdAt      DateTime     @default(now())
+
+  @@index([organisationId, createdAt(sort: Desc)])
+  @@index([organisationId, action])
 }
 
 /// One row per AI request — used for the per-broker daily limit and basic auditing.
@@ -42,66 +117,76 @@ model AiUsage {
   @@index([userId, createdAt])
 }
 
-/// A broker's client (borrower / household). Notes can be linked to one client.
+/// A brokerage's client (borrower / household). Notes can be linked to one client.
 model Client {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name      String
-  /// Stored lower-cased; unique per broker when present (used to de-duplicate CSV imports).
-  email     String?
-  phone     String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                String       @id @default(cuid())
+  organisationId    String
+  organisation      Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  /// Who created the record.
+  userId            String
+  user              User         @relation("ClientCreatedBy", fields: [userId], references: [id], onDelete: Cascade)
+  /// The adviser looking after this client (optional).
+  assignedAdviserId String?
+  assignedAdviser   User?        @relation("ClientAdviser", fields: [assignedAdviserId], references: [id], onDelete: SetNull)
+  name              String
+  /// Stored lower-cased; unique per organisation when present (used to de-duplicate CSV imports).
+  email             String?
+  phone             String?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
 
   notes Note[]
 
-  @@unique([userId, email])
-  @@index([userId, name])
+  @@unique([organisationId, email])
+  @@index([organisationId, name])
 }
 
-/// A broker's file note. Rich text is stored as Tiptap JSON; plain text is kept for search/snippets.
+/// A file note. Rich text is stored as Tiptap JSON; plain text is kept for search/snippets.
 model Note {
-  id           String     @id @default(cuid())
-  userId       String
-  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  title        String     @default("")
+  id             String       @id @default(cuid())
+  organisationId String
+  organisation   Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  /// The author. Only the author or an organisation admin may change the note.
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title          String       @default("")
   /// Tiptap/ProseMirror document JSON.
-  contentJson  Json
+  contentJson    Json
   /// Plain-text projection of contentJson (search + list snippets).
-  contentText  String     @default("")
+  contentText    String       @default("")
   /// What kind of file note this is (drives templates and filtering).
-  noteType     NoteType   @default(GENERAL)
+  noteType       NoteType     @default(GENERAL)
   /// Where the client's loan is in the pipeline when this note was written (optional).
-  loanStage    LoanStage?
+  loanStage      LoanStage?
   /// Free-form labels, e.g. "first-home-buyer", "refinance". De-duplicated case-insensitively.
-  tags         String[]   @default([])
+  tags           String[]     @default([])
   /// When the broker needs to follow up (call back, chase documents, review).
-  followUpAt   DateTime?
-  pinned       Boolean    @default(false)
-  clientId     String?
-  client       Client?    @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  followUpAt     DateTime?
+  pinned         Boolean      @default(false)
+  clientId       String?
+  client         Client?      @relation(fields: [clientId], references: [id], onDelete: SetNull)
   /// Key loan figures (loan amount, property value, income, rate, lender) — validated by Zod.
-  keyFigures   Json?
+  keyFigures     Json?
   /// DRAFT notes are editable; FINALISED notes are locked and only accept amendments.
-  status       NoteStatus @default(DRAFT)
-  finalisedAt  DateTime?
+  status         NoteStatus   @default(DRAFT)
+  finalisedAt    DateTime?
   /// Latest AI analysis (draft suggestions — never applied without the broker's click).
-  aiAnalysis   Json?
+  aiAnalysis     Json?
   /// SHA-256 of what was analysed, so an unchanged note reuses the cached result.
-  aiInputHash  String?
-  aiAnalysedAt DateTime?
-  aiModel      String?
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  aiInputHash    String?
+  aiAnalysedAt   DateTime?
+  aiModel        String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
   /// Soft delete — file notes are compliance records, so we never hard-delete.
-  deletedAt    DateTime?
+  deletedAt      DateTime?
 
   versions   NoteVersion[]
   amendments NoteAmendment[]
 
-  @@index([userId, deletedAt, updatedAt(sort: Desc)])
-  @@index([userId, followUpAt])
+  @@index([organisationId, deletedAt, updatedAt(sort: Desc)])
+  @@index([organisationId, followUpAt])
+  @@index([userId])
   @@index([clientId])
 }
 
