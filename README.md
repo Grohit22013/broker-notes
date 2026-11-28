@@ -7,7 +7,8 @@ AI assistance runs on free models only.
 [![CI](https://github.com/Grohit22013/broker-notes/actions/workflows/ci.yml/badge.svg)](https://github.com/Grohit22013/broker-notes/actions/workflows/ci.yml)
 
 > **Live demo:** _URL added after deployment (see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md))._
-> Demo login: `demo@brokernotes.dev` / `demo1234`
+> Demo logins (password `demo1234`), one per role in the demo brokerage _Harbour Home Loans_:
+> `demo@brokernotes.dev` (Admin) · `adviser@brokernotes.dev` (Adviser) · `casemanager@brokernotes.dev` (Case manager)
 
 | Notes list                                                      | Tiptap editor                                               | AI assist                                                     |
 | --------------------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------- |
@@ -63,6 +64,15 @@ the assignment. The findings shaped the product:
 - **Version history:** preview earlier versions and restore one. Delete is a **soft delete**, so records are retained.
 - **CSV:** export notes (respecting the current filters) and clients. Import clients with column matching, a preview, and duplicates skipped rather than overwritten. Exports are **Excel-safe**, with a formula-injection guard.
 
+**👥 Brokerages, roles and audit log**
+
+- **Organisations:** registering creates a brokerage with you as its **Admin**. Everyone in it shares the brokerage's clients and notes, and nobody outside it can see them.
+- **Roles:** **Admin** (manages the team and can edit any note), **Adviser** (works with clients and edits their own notes) and **Case manager** (reads everything and writes their own updates, but can't change client records or export).
+- **Invites:** admins create a **single-use invite link** (bound to an email, valid for 7 days, only a hash stored) and send it themselves, since there's no email service.
+- **Read-only for others:** a note shows its **author**. Other members see it **view-only**, enforced by the API, not just hidden in the UI. Use **"Created by me"** to filter to your own notes.
+- **Role changes and deactivation apply immediately:** the API re-reads the member on every request. A brokerage can never lose its last active admin.
+- **Audit log:** an append-only record of important actions (sign-ins, notes created, finalised, amended or deleted, client changes, exports, AI use, team changes), filterable by category. Content autosaves are deliberately left out, because version history covers them.
+
 **✨ AI assist (free models only)**
 
 - One click returns a **summary**, **action items** (insertable as a checklist), **key figures** (applied in one click) and an **RG 273 Best Interests check**.
@@ -98,8 +108,10 @@ Browser ─► Next.js (apps/web) ─/api/* proxy─► NestJS (apps/api) ─►
 
 ## Security and privacy
 
-- **Isolation:** every query is scoped to the signed-in broker. Another broker's note or client returns
-  **404**, for every action (integration-tested).
+- **Isolation:** every query is scoped to the member's **brokerage**. Another brokerage's note, client, member,
+  invite or audit entry returns **404**, for every action (integration-tested).
+- **Roles:** enforced on the server for every write. A member who isn't allowed gets **403**, so hiding a
+  control in the UI is never the only safeguard.
 - **Auth:** bcrypt (cost 12), login timing that doesn't reveal which emails exist, generic error messages,
   **10 attempts/min per IP**, and redirects restricted to this site.
 - **Compliance:** the finalise lock and soft delete are enforced on the server. Amendments are append-only,
@@ -139,16 +151,16 @@ The app opens at http://localhost:3000 and the API docs at http://localhost:4000
 | `npm test`                              | Unit tests: shared (Vitest), web (Vitest), API (Jest)              |
 | `npm run test:int -w @broker-notes/api` | API integration tests over HTTP against a real Postgres            |
 | `npm run test:e2e`                      | Playwright E2E (desktop + mobile); starts the API and the web app  |
-| `npm run db:seed`                       | (Re)create the demo account                                        |
+| `npm run db:seed`                       | (Re)create the demo brokerage (admin, adviser, case manager)       |
 
 ## Testing
 
-| Layer             | Tooling                     | Covers                                                                                                                        |
-| ----------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| Shared logic      | Vitest (110+ tests)         | Filters, Sydney dates and daylight saving, money and LVR, CSV safety, templates, lock rules, AI redaction and parsing         |
-| Web               | Vitest                      | Route guard, session JWT verification, ordered request queue, autosave timing                                                 |
-| API (integration) | Jest + supertest + Postgres | Auth and rate limits, **broker isolation**, the full note lifecycle, the finalise lock, CSV, and AI (redaction, cache, quota) |
-| End to end        | Playwright                  | Real browser flows on **desktop and mobile** across both apps, including AI (mock provider)                                   |
+| Layer             | Tooling                     | Covers                                                                                                                              |
+| ----------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Shared logic      | Vitest (120+ tests)         | Filters, Sydney dates and daylight saving, money and LVR, CSV safety, templates, lock rules, AI redaction and parsing               |
+| Web               | Vitest                      | Route guard, session JWT verification, ordered request queue, autosave timing                                                       |
+| API (integration) | Jest + supertest + Postgres | Auth and rate limits, **brokerage isolation**, **roles and invites**, the audit log, the note lifecycle, the finalise lock, CSV, AI |
+| End to end        | Playwright                  | Real browser flows on **desktop and mobile** across both apps, including AI (mock provider)                                         |
 
 **CI** (GitHub Actions) runs lint, format, typecheck, unit tests, a **database migration and drift check**,
 **API integration tests on Postgres 17**, the build, **E2E**, CodeQL, dependency review and npm audit. A single
@@ -190,10 +202,14 @@ Every phase's PR is in the [closed pull requests](https://github.com/Grohit22013
 | **One** structured AI call, cached, free models, redaction | Lowest cost and risk; no multi-step agent for a single-note task                            |
 | **Ordered** browser mutations                              | `fetch` runs in parallel; edits must land in the order they were made                       |
 | Mobile-first, accessible                                   | Brokers write notes between meetings; every control has an accessible name and 44px targets |
+| Roles checked against the **database** on every request    | A demoted or deactivated member loses access at once, not when their session token expires  |
+| Invite **links**, not emails                               | No email provider needed; single-use, expiring, email-bound tokens, stored only as hashes   |
 
 ## Limitations and next steps
 
-- No "forgot password" or email verification (no email provider). Single-broker accounts only, with no teams or processor roles yet.
+- No "forgot password" or email verification (no email provider). Invites are links that the admin sends themselves.
+- One brokerage per account. Someone who already has an account can't be invited into a second brokerage.
+- File attachments aren't supported, because they need paid file storage.
 - Render's free plan sleeps when idle; the keep-warm workflow helps during business hours.
 - Free AI models can be rate-limited upstream. The app falls back across free models and explains when it's busy.
-- Possible next steps: an "Ask my notes" agent, AI follow-up email drafts, and a broker/processor role for offshore processing teams.
+- Coming next (from the product research): a dashboard and **mortgage cases** (Phase 9), **follow-up tasks** (Phase 10), and editor extras such as edit-conflict detection and draft recovery (Phase 11).
