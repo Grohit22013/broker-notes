@@ -2,6 +2,8 @@
  * API contract: the JSON shapes the NestJS API returns and the Next.js web app consumes.
  * Dates are ISO-8601 strings on the wire.
  */
+import type { Analysis } from "./ai/analysis";
+import type { RedactionCounts } from "./ai/redact";
 import type { DocJson } from "./notes/content";
 import type { NoteStatusValue } from "./notes/finalise";
 import type { KeyFigures } from "./notes/key-figures";
@@ -77,4 +79,31 @@ export type ImportResultDto = {
   duplicates: number;
   invalid: number;
   problems: ImportProblemDto[];
+};
+
+// ── AI (Phase 6) ─────────────────────────────────────────────────────────────
+
+export type { Analysis, RedactionCounts };
+
+export type AiStatusDto = {
+  /** False when no OpenRouter key is configured on the server. */
+  enabled: boolean;
+  /** Primary model id (always a ":free" model). */
+  model: string | null;
+  dailyLimit: number;
+  usedToday: number;
+  remaining: number;
+};
+
+export type NoteAnalysisDto = {
+  analysis: Analysis;
+  model: string;
+  analysedAt: string;
+  /** True when this result was reused because the note hasn't changed since. */
+  cached: boolean;
+  /** True when the note changed after this analysis (offer "Re-analyse"). */
+  stale: boolean;
+  /** What was removed before sending (only present on a fresh analysis). */
+  redactions: RedactionCounts | null;
+  remaining: number;
 };
