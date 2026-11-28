@@ -6,7 +6,8 @@ AI assistance runs on free models only.
 
 [![CI](https://github.com/Grohit22013/broker-notes/actions/workflows/ci.yml/badge.svg)](https://github.com/Grohit22013/broker-notes/actions/workflows/ci.yml)
 
-> **Live demo:** _URL added after deployment (see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md))._
+> **Live demo:** **https://brokernotes.vercel.app** (API docs: https://brokernotes-api.onrender.com/docs).
+> The free API server can take about 50 seconds to wake up outside Australian business hours.
 > Demo logins (password `demo1234`), one per role in the demo brokerage _Harbour Home Loans_:
 > `demo@brokernotes.dev` (Admin) · `adviser@brokernotes.dev` (Adviser) · `casemanager@brokernotes.dev` (Case manager)
 

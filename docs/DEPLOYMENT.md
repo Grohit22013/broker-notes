@@ -39,6 +39,11 @@ or third-party cookie setup is needed.
 
 ## 2. Web on Vercel
 
+> **CLI alternative (what we used):** `npx vercel login`, create the project with Root Directory `apps/web`, set
+> `API_URL` and `AUTH_SECRET`, then run `vercel deploy --prod` from a clean export (`git archive main | tar -x -C <dir>`)
+> so no local `.env` files are uploaded. To redeploy automatically on merge, connect GitHub under Vercel →
+> Account → Authentication, then link the repo in the project's Git settings.
+
 1. Go to [vercel.com](https://vercel.com), choose **Add New → Project**, and import this repo.
 2. Set the **Root Directory** to `apps/web`. The build settings come from
    [`apps/web/vercel.json`](../apps/web/vercel.json) (the monorepo install and the shared-package build).
