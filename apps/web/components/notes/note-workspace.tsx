@@ -8,6 +8,7 @@ import { NoteEditor, type NoteEditorApi } from "@/components/editor/note-editor"
 import { AiPanel } from "@/components/notes/ai-panel";
 import { Amendments, type AmendmentView } from "@/components/notes/amendments";
 import { FinaliseButton } from "@/components/notes/finalise-button";
+import { FavouriteButton } from "@/components/notes/favourite-button";
 import { NoteActionsMenu } from "@/components/notes/note-actions-menu";
 import {
   NoteDetailsButton,
@@ -26,6 +27,11 @@ type Props = {
   title: string;
   displayTitle: string;
   contentJson: DocJson;
+  revision: number;
+  /** Starred by the viewer. */
+  favourite: boolean;
+  /** Admins and advisers can save a note's structure as a brokerage template. */
+  canSaveTemplate: boolean;
   createdAt: string;
   /** Author's name when someone else wrote it (null for the viewer's own note). */
   author: string | null;
@@ -61,6 +67,7 @@ export function NoteWorkspace(props: Props) {
               Created {formatDateTime(new Date(props.createdAt))}
               {props.author ? ` by ${props.author}` : ""}
             </span>
+            <FavouriteButton noteId={noteId} initial={props.favourite} />
             <NoteDetailsButton />
             <NoteTasks
               noteId={noteId}
@@ -74,7 +81,13 @@ export function NoteWorkspace(props: Props) {
             {readOnly ? null : (
               <FinaliseButton noteId={noteId} beforeFinalise={() => editorApi?.flush()} />
             )}
-            {canEdit ? <NoteActionsMenu noteId={noteId} noteTitle={props.displayTitle} /> : null}
+            <NoteActionsMenu
+              noteId={noteId}
+              noteTitle={props.displayTitle}
+              canDelete={canEdit}
+              canSaveTemplate={props.canSaveTemplate}
+              beforeSaveTemplate={() => editorApi?.flush()}
+            />
           </div>
         </div>
 
@@ -83,6 +96,7 @@ export function NoteWorkspace(props: Props) {
           noteId={noteId}
           initialTitle={props.title}
           initialContent={props.contentJson}
+          initialRevision={props.revision}
           readOnly={readOnly}
           onReady={onReady}
           aboveTitle={

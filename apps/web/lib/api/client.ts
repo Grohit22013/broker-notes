@@ -1,7 +1,15 @@
-import type { ApiErrorBody } from "@broker-notes/shared/dto";
+import type { ApiErrorBody, NoteConflictDto } from "@broker-notes/shared/dto";
 
 export type ApiResult<T> =
-  { ok: true; data: T } | { ok: false; error: string; field?: string; status: number };
+  | { ok: true; data: T }
+  | {
+      ok: false;
+      error: string;
+      field?: string;
+      status: number;
+      code?: string;
+      latest?: NoteConflictDto;
+    };
 
 type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -54,5 +62,7 @@ async function request<T>(method: Method, path: string, body?: unknown): Promise
       err?.message ??
       (res.status === 429 ? "Too many attempts. Please wait a minute." : "Something went wrong."),
     ...(err?.field ? { field: err.field } : {}),
+    ...(err?.code ? { code: err.code } : {}),
+    ...(err?.latest ? { latest: err.latest } : {}),
   };
 }

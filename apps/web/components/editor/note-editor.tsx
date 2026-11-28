@@ -3,10 +3,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 
+import { ConflictBanner, DraftBanner } from "@/components/editor/recovery-banners";
 import { EditorToolbar } from "@/components/editor/toolbar";
 import { SaveStatusIndicator } from "@/components/editor/save-status";
 import { useAutosave } from "@/hooks/use-autosave";
 import { toPlainDoc, type DocJson } from "@broker-notes/shared/notes/content";
+import {
+  draftOffer,
+  draftStorageKey,
+  parseLocalDraft,
+  type LocalDraft,
+} from "@broker-notes/shared/notes/drafts";
+import type { NoteConflictDto } from "@broker-notes/shared/dto";
 import { TITLE_MAX } from "@broker-notes/shared/notes/limits";
 import { saveNoteAction } from "@/lib/api/actions";
 
@@ -16,6 +24,8 @@ type NoteEditorProps = {
   noteId: string;
   initialTitle: string;
   initialContent: DocJson;
+  /** The note's revision when loaded; saves are refused if it has moved on (edit conflict). */
+  initialRevision: number;
   /** Rendered between the title and the body (e.g. note details badges). */
   belowTitle?: React.ReactNode;
   /** Rendered above the title (e.g. the "finalised" banner). */
@@ -49,6 +59,7 @@ export function NoteEditor({
   noteId,
   initialTitle,
   initialContent,
+  initialRevision,
   belowTitle,
   aboveTitle,
   afterBody,
@@ -58,14 +69,76 @@ export function NoteEditor({
   const [title, setTitle] = useState(initialTitle);
   const titleRef = useRef<HTMLTextAreaElement>(null);
 
-  const save = useCallback((draft: Draft) => saveNoteAction({ id: noteId, ...draft }), [noteId]);
-  const { status, error, schedule, flush } = useAutosave<Draft>({ save, delay: 1500 });
+  // The revision our edits are based on; every successful save moves it forward.
+  const revision = useRef(initialRevision);
+  const save = useCallback(
+    async (draft: Draft) => {
+      const res = await saveNoteAction({ id: noteId, ...draft, baseRevision: revision.current });
+      if (res.ok) revision.current = res.revision;
+      return res;
+    },
+    [noteId],
+  );
+  const { status, error, schedule, flush, conflict, resolveConflict } = useAutosave<
+    Draft,
+    NoteConflictDto
+  >({ save, delay: 1500 });
+
+  // ── Local draft: unsaved edits are mirrored to this browser until the server has them ──
+  const storageKey = draftStorageKey(noteId);
+  const writeLocalDraft = useCallback(
+    (d: Draft) => {
+      try {
+        const local: LocalDraft = {
+          title: d.title,
+          contentJson: d.contentJson,
+          baseRevision: revision.current,
+          savedAt: new Date().toISOString(),
+        };
+        localStorage.setItem(storageKey, JSON.stringify(local));
+      } catch {
+        // Storage full or disabled: autosave still works, there's just no local copy.
+      }
+    },
+    [storageKey],
+  );
+  const clearLocalDraft = useCallback(() => {
+    try {
+      localStorage.removeItem(storageKey);
+    } catch {
+      /* ignore */
+    }
+  }, [storageKey]);
+  useEffect(() => {
+    if (status === "saved") clearLocalDraft();
+  }, [status, clearLocalDraft]);
+
+  // On open: offer edits left behind by a crashed/closed tab (only if they differ).
+  const [recovered, setRecovered] = useState<(LocalDraft & { stale: boolean }) | null>(null);
+  useEffect(() => {
+    if (readOnly) return;
+    let raw: string | null = null;
+    try {
+      raw = localStorage.getItem(storageKey);
+    } catch {
+      return;
+    }
+    const local = parseLocalDraft(raw);
+    const offer = draftOffer(local, {
+      title: initialTitle,
+      contentJson: initialContent,
+      revision: initialRevision,
+    });
+    if (local && offer.offer) setRecovered({ ...local, stale: offer.stale });
+    else if (local) clearLocalDraft();
+    // Only when the note is opened.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [noteId]);
 
   const extensions = useMemo(
     () =>
       buildExtensions({
-        placeholder:
-          "Start your file note… Markdown shortcuts work: ## heading, - list, [ ] checklist",
+        placeholder: "Start your file note… Type / for headings, checklists and tables",
       }),
     [],
   );
@@ -89,13 +162,15 @@ export function NoteEditor({
   const queueSave = useCallback(
     (nextTitle: string) => {
       if (!editor) return;
-      schedule({
+      const draft = {
         title: nextTitle,
         contentJson: toPlainDoc(editor.getJSON()),
         contentText: editor.getText({ blockSeparator: "\n" }),
-      });
+      };
+      writeLocalDraft(draft);
+      schedule(draft);
     },
-    [editor, schedule],
+    [editor, schedule, writeLocalDraft],
   );
 
   // Latest title for the editor's update handler without re-subscribing on every keystroke.
@@ -186,6 +261,40 @@ export function NoteEditor({
     el.style.height = `${el.scrollHeight}px`;
   }, [title]);
 
+  /** Replace the editor's title + body without treating it as a user edit. */
+  const replaceContent = useCallback(
+    (nextTitle: string, content: DocJson) => {
+      editor?.commands.setContent(content, { emitUpdate: false });
+      setTitle(nextTitle);
+      titleValue.current = nextTitle;
+    },
+    [editor],
+  );
+
+  const loadTheirs = () => {
+    if (!conflict) return;
+    revision.current = conflict.revision;
+    replaceContent(conflict.title, conflict.contentJson);
+    clearLocalDraft();
+    resolveConflict("discard");
+  };
+  const keepMine = () => {
+    if (!conflict) return;
+    // Save my version on top of theirs (their version stays in the history).
+    revision.current = conflict.revision;
+    resolveConflict("keep");
+  };
+  const restoreDraft = () => {
+    if (!recovered) return;
+    replaceContent(recovered.title, recovered.contentJson);
+    setRecovered(null);
+    queueSave(recovered.title);
+  };
+  const discardDraft = () => {
+    clearLocalDraft();
+    setRecovered(null);
+  };
+
   const words = useEditorState({
     editor,
     selector: ({ editor: e }) => (e ? (e.storage.characterCount?.words() as number) : 0),
@@ -221,6 +330,22 @@ export function NoteEditor({
         )}
 
         {aboveTitle}
+
+        {!readOnly && conflict ? (
+          <ConflictBanner
+            updatedAt={conflict.updatedAt}
+            onLoadTheirs={loadTheirs}
+            onKeepMine={keepMine}
+          />
+        ) : null}
+        {!readOnly && recovered && !conflict ? (
+          <DraftBanner
+            savedAt={recovered.savedAt}
+            stale={recovered.stale}
+            onRestore={restoreDraft}
+            onDiscard={discardDraft}
+          />
+        ) : null}
 
         <label htmlFor="note-title" className="sr-only">
           Note title

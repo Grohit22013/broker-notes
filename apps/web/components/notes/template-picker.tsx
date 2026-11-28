@@ -12,8 +12,15 @@ import {
   RefreshCcw,
   Scale,
   type LucideIcon,
+  Landmark,
+  LayoutTemplate,
+  Users,
+  X,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 
+import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -24,6 +31,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useCreateNoteAction } from "@/hooks/use-create-note";
+import { removeTemplateAction } from "@/lib/api/note-extras-actions";
 
 export type TemplateCard = { id: string; name: string; description: string };
 
@@ -35,6 +43,8 @@ const ICONS: Record<string, LucideIcon> = {
   conditions: FileText,
   settlement: CalendarCheck,
   review: RefreshCcw,
+  "lender-update": Landmark,
+  "client-meeting": Users,
 };
 
 const NO_CLIENT = "none";
@@ -44,12 +54,15 @@ export function TemplatePicker({
   clients,
   defaultClientId,
   forCase,
+  orgTemplates = [],
 }: {
   templates: TemplateCard[];
   clients: { id: string; name: string }[];
   defaultClientId?: string;
   /** Creating the note for this case (its client is fixed). */
   forCase?: { id: string; reference: string };
+  /** The brokerage's own templates (saved from notes). */
+  orgTemplates?: (TemplateCard & { canRemove: boolean; createdBy: string })[];
 }) {
   const [clientId, setClientId] = useState(defaultClientId ?? NO_CLIENT);
   const createNote = useCreateNoteAction();
@@ -98,7 +111,61 @@ export function TemplatePicker({
           </li>
         ))}
       </ul>
+
+      {orgTemplates.length ? (
+        <section aria-labelledby="org-templates" className="grid gap-3">
+          <h2 id="org-templates" className="text-lg font-semibold">
+            Your brokerage&apos;s templates
+          </h2>
+          <ul
+            className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"
+            aria-label="Brokerage templates"
+          >
+            {orgTemplates.map((t) => (
+              <li key={t.id} className="relative">
+                <form action={createNote} className="h-full">
+                  <input type="hidden" name="templateId" value={t.id} />
+                  {forCase ? <input type="hidden" name="caseId" value={forCase.id} /> : null}
+                  {clientId !== NO_CLIENT ? (
+                    <input type="hidden" name="clientId" value={clientId} />
+                  ) : null}
+                  <TemplateButton
+                    template={{ ...t, description: t.description || `Saved by ${t.createdBy}` }}
+                    icon={LayoutTemplate}
+                  />
+                </form>
+                {t.canRemove ? <RemoveTemplateButton id={t.id} name={t.name} /> : null}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
     </div>
+  );
+}
+
+function RemoveTemplateButton({ id, name }: { id: string; name: string }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon"
+      className="absolute top-2 right-2 size-9"
+      aria-label={`Remove template ${name}`}
+      disabled={busy}
+      onClick={async () => {
+        setBusy(true);
+        const res = await removeTemplateAction(id);
+        setBusy(false);
+        if (!res.ok) return void toast.error(res.error);
+        toast.success(`Template “${name}” removed`);
+        router.refresh();
+      }}
+    >
+      <X className="size-4" aria-hidden />
+    </Button>
   );
 }
 

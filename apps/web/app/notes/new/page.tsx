@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { TemplatePicker } from "@/components/notes/template-picker";
 import { PageHeader } from "@/components/shared/page-header";
 import { requireUser } from "@/lib/auth/session";
-import { caseOptions, clientOptions } from "@/lib/api/queries";
+import { caseOptions, clientOptions, orgTemplates } from "@/lib/api/queries";
 import { BLANK_TEMPLATE_ID, TEMPLATES } from "@broker-notes/shared/notes/templates";
 
 export const metadata: Metadata = { title: "New note" };
@@ -12,10 +12,11 @@ type Props = { searchParams: Promise<{ client?: string; case?: string }> };
 
 export default async function NewNotePage({ searchParams }: Props) {
   await requireUser();
-  const [{ client, case: caseId }, clients, cases] = await Promise.all([
+  const [{ client, case: caseId }, clients, cases, own] = await Promise.all([
     searchParams,
     clientOptions(),
     caseOptions(),
+    orgTemplates(),
   ]);
   const forCase = cases.find((c) => c.id === caseId);
   const defaultClientId =
@@ -31,6 +32,13 @@ export default async function NewNotePage({ searchParams }: Props) {
         clients={clients}
         defaultClientId={defaultClientId}
         forCase={forCase ? { id: forCase.id, reference: forCase.reference } : undefined}
+        orgTemplates={own.map((t) => ({
+          id: t.id,
+          name: t.name,
+          description: t.description ?? "",
+          canRemove: t.canRemove,
+          createdBy: t.createdBy.name,
+        }))}
         templates={[
           {
             id: BLANK_TEMPLATE_ID,
