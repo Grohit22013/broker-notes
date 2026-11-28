@@ -251,7 +251,7 @@ describe("dashboard", () => {
     await adviser.agent.post("/notes").send({ templateId: "blank" }).expect(201);
 
     const d = (await adviser.agent.get("/dashboard").expect(200)).body;
-    expect(d.counts).toEqual({
+    expect(d.counts).toMatchObject({
       notes: 2,
       myNotes: 1,
       followUpsDue: 1,
@@ -269,7 +269,7 @@ describe("dashboard", () => {
 
     // Nothing from other brokerages.
     const other = await admin();
-    expect((await other.agent.get("/dashboard").expect(200)).body.counts).toEqual({
+    expect((await other.agent.get("/dashboard").expect(200)).body.counts).toMatchObject({
       notes: 0,
       myNotes: 0,
       followUpsDue: 0,

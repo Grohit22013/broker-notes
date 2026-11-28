@@ -6,6 +6,7 @@ import type {
   CaseListItemDto,
   CaseOptionDto,
   DashboardDto,
+  TaskDto,
   ClientDetailDto,
   ClientListItemDto,
   NoteDetailDto,
@@ -47,6 +48,14 @@ export const existingClientEmails = () => apiGet<string[]>("/clients/emails");
 export const getOrganisation = () => apiGet<OrganisationDto>("/organisation");
 
 export const getDashboard = () => apiGet<DashboardDto>("/dashboard");
+
+/** Tasks, filtered like the /tasks page URL (status, assignee, due, note, client, case, q). */
+export function listTasks(params: Record<string, string | undefined> = {}) {
+  const qs = new URLSearchParams(
+    Object.entries(params).filter((e): e is [string, string] => Boolean(e[1])),
+  ).toString();
+  return apiGet<TaskDto[]>(`/tasks${qs ? `?${qs}` : ""}`);
+}
 
 /** Cases, filtered like the /cases page URL (q, stage, client, status, mine). */
 export function listCases(params: Record<string, string | undefined> = {}) {

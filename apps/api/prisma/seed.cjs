@@ -334,10 +334,12 @@ async function main() {
     },
   ];
 
+  /** Created notes by template id (for linking tasks). */
+  const noteByTemplate = {};
   for (const n of notes) {
     const tpl = noteFromTemplate(n.template, n.client.name);
     const author = n.author ?? user;
-    const created = await db.note.create({
+    const created = (noteByTemplate[n.template] = await db.note.create({
       data: {
         organisationId: org.id,
         userId: author.id,
@@ -359,7 +361,7 @@ async function main() {
         },
         ...(n.finalise ? { status: "FINALISED", finalisedAt: hoursAgo(n.hours) } : {}),
       },
-    });
+    }));
     const ref = { entityType: "note", entityId: created.id };
     await audit(author, "note.created", `Created “${tpl.title}”`, n.hours + 1, ref);
     if (n.finalise) await audit(author, "note.finalised", `Finalised “${tpl.title}”`, n.hours, ref);
@@ -368,6 +370,80 @@ async function main() {
       await audit(author, "note.amended", `Added an amendment to “${tpl.title}”`, n.hours, ref);
     }
   }
+  // Follow-up tasks: some due, one overdue, one done, one unassigned.
+  const task = async (title, from, extra) => {
+    const t = await db.task.create({
+      data: {
+        organisationId: org.id,
+        title,
+        noteId: from.note?.id ?? null,
+        clientId: from.client.id,
+        caseId: from.case?.id ?? null,
+        createdById: from.by.id,
+        createdAt: hoursAgo(from.hours),
+        ...extra,
+      },
+    });
+    await audit(from.by, "task.created", `Created task “${title}”`, from.hours, {
+      entityType: "task",
+      entityId: t.id,
+    });
+    return t;
+  };
+  await task(
+    "Request 3 months of payslips",
+    { note: noteByTemplate.discovery, client: nguyen, case: nguyenPurchase, by: adviser, hours: 2 },
+    { assigneeId: adviser.id, priority: "HIGH", dueAt: day(0) },
+  );
+  await task(
+    "Chase rental ledger for the investment property",
+    {
+      note: noteByTemplate.conditions,
+      client: patel,
+      case: patelInvestment,
+      by: caseManager,
+      hours: 5,
+    },
+    { assigneeId: caseManager.id, priority: "HIGH", dueAt: day(-2), status: "IN_PROGRESS" },
+  );
+  await task(
+    "Send signed contract of sale to ANZ",
+    {
+      note: noteByTemplate.conditions,
+      client: patel,
+      case: patelInvestment,
+      by: caseManager,
+      hours: 5,
+    },
+    { assigneeId: caseManager.id, dueAt: day(1) },
+  );
+  await task(
+    "Confirm gift letter is on file",
+    {
+      note: noteByTemplate["lender-rationale"],
+      client: smith,
+      case: smithPurchase,
+      by: user,
+      hours: 26,
+    },
+    { assigneeId: user.id, dueAt: day(3) },
+  );
+  await task(
+    "Book annual review",
+    { note: noteByTemplate.settlement, client: obrien, case: obrienPurchase, by: user, hours: 72 },
+    { priority: "LOW", dueAt: day(300) },
+  );
+  await task(
+    "Send fact find",
+    { note: noteByTemplate.discovery, client: nguyen, case: nguyenPurchase, by: adviser, hours: 2 },
+    {
+      assigneeId: adviser.id,
+      status: "COMPLETED",
+      completedAt: hoursAgo(1),
+      completedById: adviser.id,
+    },
+  );
+
   await audit(user, "export.clients", "Exported 4 clients to CSV", 20, {
     entityType: "export",
     metadata: { count: 4 },
@@ -379,7 +455,7 @@ async function main() {
   const source = process.env.SEED_PASSWORD ? "SEED_PASSWORD" : "the documented demo default";
   console.log(
     `Seeded “Harbour Home Loans”: ${EMAIL} (admin), ${ADVISER_EMAIL}, ${CM_EMAIL} ` +
-      `(password from ${source}) — 4 clients, ${caseSeq} cases, ${notes.length} notes.`,
+      `(password from ${source}) — 4 clients, ${caseSeq} cases, ${notes.length} notes, 6 tasks.`,
   );
 }
 

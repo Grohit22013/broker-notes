@@ -5,8 +5,7 @@ import { createBlankNote, register, saveStatus, uniqueEmail } from "./helpers";
 const LONG = "Wolfeschlegelsteinhausenbergerdorff-Montgomery-Featherstonehaugh family trust";
 
 async function noSidewaysScroll(page: Page, path: string) {
-  await page.goto(path);
-  await page.getByRole("heading", { level: 1 }).first().waitFor();
+  await page.goto(path, { waitUntil: "networkidle" });
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
   );
@@ -39,6 +38,7 @@ test("main pages never scroll sideways, even with very long names", async ({ pag
   await page.getByRole("textbox", { name: "Note body" }).click();
   await page.getByRole("textbox", { name: "Note body" }).pressSequentially("Pinned for layout.");
   await expect(saveStatus(page)).toHaveText(/Saved/, { timeout: 15_000 });
+  const notePath = new URL(page.url()).pathname;
 
   for (const path of [
     "/dashboard",
@@ -47,6 +47,8 @@ test("main pages never scroll sideways, even with very long names", async ({ pag
     "/clients",
     clientPath,
     casePath,
+    notePath,
+    "/tasks?view=all",
     "/settings/team",
   ]) {
     await noSidewaysScroll(page, path);

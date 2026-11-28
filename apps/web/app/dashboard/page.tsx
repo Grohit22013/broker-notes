@@ -5,6 +5,7 @@ import {
   CalendarClock,
   ChevronRight,
   FileText,
+  ListTodo,
   Pin,
   Search,
   UserRound,
@@ -18,7 +19,8 @@ import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { requireUser } from "@/lib/auth/session";
-import { getDashboard } from "@/lib/api/queries";
+import { activeMembers, getDashboard } from "@/lib/api/queries";
+import { TaskList } from "@/components/tasks/task-list";
 import { formatRelative } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { caseStage } from "@broker-notes/shared/cases/taxonomy";
@@ -40,7 +42,7 @@ function greeting(now = new Date()) {
 
 export default async function DashboardPage() {
   const user = await requireUser();
-  const d = await getDashboard();
+  const [d, members] = await Promise.all([getDashboard(), activeMembers()]);
   const pipelineTotal = d.pipeline.reduce((n, p) => n + p.count, 0);
 
   const stats: { label: string; value: number; href: string; icon: LucideIcon; hint: string }[] = [
@@ -50,6 +52,13 @@ export default async function DashboardPage() {
       href: "/notes?due=1",
       icon: CalendarClock,
       hint: "today or overdue",
+    },
+    {
+      label: "My tasks",
+      value: d.counts.myOpenTasks,
+      href: "/tasks",
+      icon: ListTodo,
+      hint: d.counts.myOverdueTasks ? `${d.counts.myOverdueTasks} overdue` : "none overdue",
     },
     {
       label: "Open cases",
@@ -89,7 +98,7 @@ export default async function DashboardPage() {
         />
       </form>
 
-      <ul className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <ul className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {stats.map((s) => (
           <li key={s.label}>
             <Link
@@ -111,6 +120,19 @@ export default async function DashboardPage() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="grid min-w-0 grid-cols-1 gap-6 lg:col-span-2">
+          <section aria-labelledby="my-tasks" className="min-w-0">
+            <div className="mb-2 flex items-center justify-between">
+              <h2 id="my-tasks" className="flex items-center gap-2 font-semibold">
+                <ListTodo className="text-primary size-4" aria-hidden /> My tasks
+              </h2>
+              <Button asChild variant="ghost" size="sm" className="text-primary h-8">
+                <Link href="/tasks" aria-label="See all: My tasks">
+                  See all
+                </Link>
+              </Button>
+            </div>
+            <TaskList tasks={d.myTasks} members={members} empty="Nothing assigned to you." />
+          </section>
           <Panel
             title="Follow-ups"
             icon={CalendarClock}

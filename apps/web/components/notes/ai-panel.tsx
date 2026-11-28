@@ -13,7 +13,10 @@ import {
   Sparkles,
   TextQuote,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+
+import { batchTasksAction } from "@/lib/api/task-actions";
 import type { NoteAnalysisDto, RedactionCounts } from "@broker-notes/shared/dto";
 import { lvrOf, type KeyFigures } from "@broker-notes/shared/notes/figures";
 import { formatAud } from "@broker-notes/shared/money";
@@ -80,6 +83,15 @@ export function AiPanel({
 }) {
   const isDesktop = useMediaQuery("(min-width: 768px)");
   const { meta, update } = useNoteDetails();
+  const router = useRouter();
+  const [creatingTasks, startCreatingTasks] = useTransition();
+  const createTasks = (titles: string[]) =>
+    startCreatingTasks(async () => {
+      const res = await batchTasksAction({ noteId, titles: titles.slice(0, 20) });
+      if (!res.ok) return void toast.error(res.error);
+      toast.success(`Created ${res.created} task${res.created === 1 ? "" : "s"} — see Tasks`);
+      router.refresh();
+    });
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<Status>(null);
   const [result, setResult] = useState<NoteAnalysisDto | null>(null);
@@ -306,6 +318,15 @@ export function AiPanel({
                         }}
                       >
                         Insert as checklist
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-3 ml-2"
+                        disabled={creatingTasks}
+                        onClick={() => createTasks(a.actionItems.map((i) => i.text))}
+                      >
+                        Create tasks
                       </Button>
                     </>
                   ) : (

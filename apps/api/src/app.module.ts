@@ -19,6 +19,8 @@ import { NotesService } from "./notes/notes.service";
 import { OrganisationsController } from "./organisations/organisations.controller";
 import { OrganisationsService } from "./organisations/organisations.service";
 import { PrismaModule, PrismaService } from "./prisma/prisma.service";
+import { TasksController } from "./tasks/tasks.controller";
+import { TasksService } from "./tasks/tasks.service";
 
 @ApiTags("health")
 @Controller("health")
@@ -50,6 +52,7 @@ class HealthController {
     OrganisationsController,
     CasesController,
     DashboardController,
+    TasksController,
   ],
   providers: [
     NotesService,
@@ -59,6 +62,7 @@ class HealthController {
     OrganisationsService,
     CasesService,
     DashboardService,
+    TasksService,
     { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })

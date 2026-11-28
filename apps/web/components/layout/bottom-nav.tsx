@@ -15,7 +15,7 @@ export function BottomNav() {
       aria-label="Main"
       className="bg-background/95 pb-safe fixed inset-x-0 bottom-0 z-40 border-t backdrop-blur md:hidden"
     >
-      <ul className="grid grid-cols-5">
+      <ul className="grid grid-cols-6">
         {mainNav.map((item) => {
           const active = isActivePath(pathname, item.href);
           const Icon = item.icon;

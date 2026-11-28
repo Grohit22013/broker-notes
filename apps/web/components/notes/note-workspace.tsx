@@ -15,6 +15,8 @@ import {
   NoteDetailsSummary,
 } from "@/components/notes/note-details";
 import { VersionHistory } from "@/components/notes/version-history";
+import { NoteTasks } from "@/components/tasks/note-tasks";
+import type { TaskDto, UserRefDto } from "@broker-notes/shared/dto";
 import { Button } from "@/components/ui/button";
 import { formatDateTime } from "@/lib/format";
 import type { DocJson } from "@broker-notes/shared/notes/content";
@@ -29,6 +31,10 @@ type Props = {
   author: string | null;
   /** Author or admin. Others get a read-only view. */
   canEdit: boolean;
+  /** This note's follow-up tasks (open and done). */
+  tasks: TaskDto[];
+  members: UserRefDto[];
+  currentUserId: string;
   finalisedAt: string | null;
   amendments: AmendmentView[];
 };
@@ -44,18 +50,25 @@ export function NoteWorkspace(props: Props) {
   return (
     <>
       <div className="container-page">
-        <div className="flex items-center justify-between gap-2 pt-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-3">
           <Button asChild variant="ghost" size="sm" className="text-muted-foreground -ml-2 h-10">
             <Link href="/notes">
               <ChevronLeft className="size-4" aria-hidden /> All notes
             </Link>
           </Button>
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
             <span className="text-muted-foreground hidden text-xs xl:inline">
               Created {formatDateTime(new Date(props.createdAt))}
               {props.author ? ` by ${props.author}` : ""}
             </span>
             <NoteDetailsButton />
+            <NoteTasks
+              noteId={noteId}
+              tasks={props.tasks}
+              members={props.members}
+              currentUserId={props.currentUserId}
+              editorApi={editorApi}
+            />
             <AiPanel noteId={noteId} editorApi={editorApi} finalised={readOnly} />
             <VersionHistory noteId={noteId} canRestore={!readOnly} editorApi={editorApi} />
             {readOnly ? null : (

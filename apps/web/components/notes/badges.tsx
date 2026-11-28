@@ -54,18 +54,21 @@ export function FollowUpBadge({
   date,
   now,
   className,
+  verb = "Follow up",
 }: {
   date: Date;
   now?: Date;
   className?: string;
+  /** "Follow up" for notes, "Due" for tasks. */
+  verb?: string;
 }) {
   const state = followUpState(date, now);
   const label =
     state === "overdue"
       ? `Overdue · ${formatShortDate(date)}`
       : state === "today"
-        ? "Follow up today"
-        : `Follow up ${formatShortDate(date)}`;
+        ? `${verb} today`
+        : `${verb} ${formatShortDate(date)}`;
   return (
     <span className={cn(base, FOLLOW_UP_STYLES[state], className)}>
       <CalendarClock className="size-3.5" aria-hidden />

@@ -54,6 +54,17 @@ export function canMoveCaseStage(_actor: Actor): boolean {
   return true;
 }
 
+/**
+ * Follow-up tasks: anyone may create one; the creator, the assignee or an admin may change it
+ * (complete, reassign, cancel).
+ */
+export function canChangeTask(
+  actor: Actor,
+  task: { createdById: string; assigneeId: string | null },
+): boolean {
+  return actor.role === "ADMIN" || actor.id === task.createdById || actor.id === task.assigneeId;
+}
+
 /** Bulk CSV export of the brokerage's notes or clients. */
 export function canExport(actor: Actor): boolean {
   return actor.role === "ADMIN" || actor.role === "ADVISER";

@@ -75,6 +75,15 @@ the assignment. The findings shaped the product:
 - **Nine-stage pipeline** (from the product research, in Australian terms): Enquiry → Fact find → Research → Recommendation → Lodged → Assessment → Approved → Settled → Closed. One click moves a case, and every move is audited. **Case managers can move stages** (tracking progress is their job), but only admins and advisers open cases or change their details.
 - **Notes belong to cases:** write a note from a case, or link one in the details panel. Linking also sets the client. Each case page is a **timeline of its notes**, notes can be searched by case reference, and the notes CSV includes the case.
 
+**✅ Follow-up tasks**
+
+- **Tasks** have a title, due date (a Sydney calendar day), priority, assignee and status (to do, in progress, done or cancelled), and can be linked to a **note, client and/or case**. A note brings its client and case; a case brings its client.
+- **One click from a note:** turn its **unticked checklist** into tasks (no duplicates), or create tasks from the **AI action items**.
+- **Where they appear:** a **Tasks** page (assigned to me, all open, unassigned, done, plus overdue / today / next 7 days and search), a Tasks panel on every note, open tasks on case and client pages, and **My tasks** on the dashboard. Tick a task to complete it.
+
+<img src="docs/screenshots/tasks-desktop.png" width="640" alt="Tasks page">
+- **Who can change a task:** anyone can create one (case managers chase documents); only its creator, its assignee or an admin can change it. Tasks are never deleted, only cancelled, and every change is audited.
+
 **👥 Brokerages, roles and audit log**
 
 - **Organisations:** registering creates a brokerage with you as its **Admin**. Everyone in it shares the brokerage's clients and notes, and nobody outside it can see them.
@@ -166,12 +175,12 @@ The app opens at http://localhost:3000 and the API docs at http://localhost:4000
 
 ## Testing
 
-| Layer             | Tooling                     | Covers                                                                                                                                    |
-| ----------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| Shared logic      | Vitest (130+ tests)         | Filters, Sydney dates and daylight saving, money and LVR, CSV safety, templates, lock rules, AI redaction and parsing                     |
-| Web               | Vitest                      | Route guard, session JWT verification, ordered request queue, autosave timing                                                             |
-| API (integration) | Jest + supertest + Postgres | Auth and rate limits, **brokerage isolation**, roles and invites, **cases and the dashboard**, the audit log, the note lifecycle, CSV, AI |
-| End to end        | Playwright                  | Real browser flows on **desktop and mobile** across both apps, including AI (mock provider)                                               |
+| Layer             | Tooling                     | Covers                                                                                                                                           |
+| ----------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Shared logic      | Vitest (130+ tests)         | Filters, Sydney dates and daylight saving, money and LVR, CSV safety, templates, lock rules, AI redaction and parsing                            |
+| Web               | Vitest                      | Route guard, session JWT verification, ordered request queue, autosave timing                                                                    |
+| API (integration) | Jest + supertest + Postgres | Auth and rate limits, **brokerage isolation**, roles and invites, cases, **tasks** and the dashboard, the audit log, the note lifecycle, CSV, AI |
+| End to end        | Playwright                  | Real browser flows on **desktop and mobile** across both apps, including AI (mock provider)                                                      |
 
 **CI** (GitHub Actions) runs lint, format, typecheck, unit tests, a **database migration and drift check**,
 **API integration tests on Postgres 17**, the build, **E2E**, CodeQL, dependency review and npm audit. A single
@@ -224,4 +233,5 @@ Every phase's PR is in the [closed pull requests](https://github.com/Grohit22013
 - File attachments aren't supported, because they need paid file storage.
 - Render's free plan sleeps when idle; the keep-warm workflow helps during business hours.
 - Free AI models can be rate-limited upstream. The app falls back across free models and explains when it's busy.
-- Coming next (from the product research): **follow-up tasks** (Phase 10), and editor extras such as edit-conflict detection and draft recovery (Phase 11).
+- Filter chips on server-rendered list pages use plain links (a full page load), because in production builds Next.js 15.5 sometimes never applies a client navigation that only changes the query string. See SCRATCHPAD "Open issues".
+- Coming next (from the product research): editor extras such as edit-conflict detection and draft recovery (Phase 11).
