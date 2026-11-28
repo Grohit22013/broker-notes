@@ -13,6 +13,8 @@ import { ClientsService } from "./clients/clients.service";
 import { ExportController } from "./export/export.controller";
 import { NotesController } from "./notes/notes.controller";
 import { NotesService } from "./notes/notes.service";
+import { OrganisationsController } from "./organisations/organisations.controller";
+import { OrganisationsService } from "./organisations/organisations.service";
 import { PrismaModule, PrismaService } from "./prisma/prisma.service";
 
 @ApiTags("health")
@@ -42,12 +44,14 @@ class HealthController {
     ClientsController,
     ExportController,
     AiController,
+    OrganisationsController,
   ],
   providers: [
     NotesService,
     ClientsService,
     AiService,
     OpenRouterClient,
+    OrganisationsService,
     { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })

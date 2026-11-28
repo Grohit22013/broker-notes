@@ -14,31 +14,42 @@ import type {
   ImportResultDto,
 } from "@broker-notes/shared/dto";
 
+import { AuditService } from "../audit/audit.service";
+import type { SessionUser } from "../auth/auth.guard";
 import { PrismaService } from "../prisma/prisma.service";
 
-const select = { id: true, name: true, email: true, phone: true } as const;
+const select = {
+  id: true,
+  name: true,
+  email: true,
+  phone: true,
+  assignedAdviser: { select: { id: true, name: true } },
+} as const;
 const activeNotes = { where: { deletedAt: null } } as const;
 
 function duplicateEmail(err: unknown): never {
   if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
     throw new ConflictException({
-      message: "You already have a client with this email",
+      message: "Your brokerage already has a client with this email",
       field: "email",
     });
   }
   throw err;
 }
 
-/** Client records. All queries are scoped to the signed-in broker. */
+/** Client records, shared by everyone in the brokerage. All queries are scoped to it. */
 @Injectable()
 export class ClientsService {
-  constructor(private readonly db: PrismaService) {}
+  constructor(
+    private readonly db: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
-  async list(userId: string, q = ""): Promise<ClientListItemDto[]> {
+  async list(organisationId: string, q = ""): Promise<ClientListItemDto[]> {
     const term = q.trim().slice(0, 100);
     const rows = await this.db.client.findMany({
       where: {
-        userId,
+        organisationId,
         ...(term
           ? {
               OR: [
@@ -67,14 +78,15 @@ export class ClientsService {
       name: r.name,
       email: r.email,
       phone: r.phone,
+      assignedAdviser: r.assignedAdviser,
       noteCount: r._count.notes,
       lastNoteAt: r.notes[0]?.updatedAt.toISOString() ?? null,
     }));
   }
 
-  options(userId: string): Promise<{ id: string; name: string }[]> {
+  options(organisationId: string): Promise<{ id: string; name: string }[]> {
     return this.db.client.findMany({
-      where: { userId },
+      where: { organisationId },
       orderBy: { name: "asc" },
       select: { id: true, name: true },
       take: 1000,
@@ -82,57 +94,114 @@ export class ClientsService {
   }
 
   /** Lower-cased emails of existing clients — lets the import preview flag duplicates. */
-  async emails(userId: string): Promise<string[]> {
+  async emails(organisationId: string): Promise<string[]> {
     const rows = await this.db.client.findMany({
-      where: { userId, email: { not: null } },
+      where: { organisationId, email: { not: null } },
       select: { email: true },
     });
     return rows.map((r) => r.email!).filter(Boolean);
   }
 
-  async get(userId: string, id: string): Promise<ClientDetailDto> {
+  async get(organisationId: string, id: string): Promise<ClientDetailDto> {
     const c = await this.db.client.findFirst({
-      where: { id, userId },
+      where: { id, organisationId },
       select: { ...select, createdAt: true },
     });
     if (!c) throw new NotFoundException("Client not found");
     return { ...c, createdAt: c.createdAt.toISOString() };
   }
 
-  async create(userId: string, data: ClientData): Promise<ClientDto> {
-    return this.db.client.create({ data: { ...data, userId }, select }).catch(duplicateEmail);
+  async create(actor: SessionUser, data: ClientData): Promise<ClientDto> {
+    await this.assertAdviser(actor, data.assignedAdviserId);
+    return this.db
+      .$transaction(async (tx) => {
+        const client = await tx.client.create({
+          data: { ...data, organisationId: actor.organisationId, userId: actor.id },
+          select,
+        });
+        await this.audit.record(
+          actor,
+          {
+            action: "client.created",
+            summary: `Added client ${client.name}`,
+            entityType: "client",
+            entityId: client.id,
+          },
+          tx,
+        );
+        return client;
+      })
+      .catch(duplicateEmail);
   }
 
-  async update(userId: string, id: string, data: ClientData): Promise<ClientDto> {
-    const { count } = await this.db.client
-      .updateMany({ where: { id, userId }, data })
+  async update(actor: SessionUser, id: string, data: ClientData): Promise<ClientDto> {
+    await this.assertAdviser(actor, data.assignedAdviserId);
+    return this.db
+      .$transaction(async (tx) => {
+        const { count } = await tx.client.updateMany({
+          where: { id, organisationId: actor.organisationId },
+          data,
+        });
+        if (count === 0) throw new NotFoundException("Client not found");
+        const client = await tx.client.findUniqueOrThrow({ where: { id }, select });
+        await this.audit.record(
+          actor,
+          {
+            action: "client.updated",
+            summary: `Updated client ${client.name}`,
+            entityType: "client",
+            entityId: id,
+          },
+          tx,
+        );
+        return client;
+      })
       .catch(duplicateEmail);
-    if (count === 0) throw new NotFoundException("Client not found");
-    return this.db.client.findUniqueOrThrow({ where: { id }, select });
   }
 
   /** Server re-validates every row (never trusts the browser preview); duplicates are skipped. */
   async import(
-    userId: string,
+    actor: SessionUser,
     rows: Record<string, string>[],
     mapping: ColumnMapping,
   ): Promise<ImportResultDto> {
-    const existing = new Set(await this.emails(userId));
+    const existing = new Set(await this.emails(actor.organisationId));
     const results = validateImportRows(rows, mapping, existing);
     const valid = results.filter((r) => r.status === "valid");
     const { count } = await this.db.client.createMany({
-      data: valid.map((r) => ({ ...r.data, userId })),
+      data: valid.map((r) => ({
+        ...r.data,
+        organisationId: actor.organisationId,
+        userId: actor.id,
+      })),
       skipDuplicates: true,
     });
     const summary = summariseImport(results);
-    const problems: ImportProblemDto[] = results.flatMap((r) =>
-      r.status === "valid" ? [] : [{ row: r.row, status: r.status, reason: r.reason }],
-    );
-    return {
+    const result = {
       imported: count,
       duplicates: summary.duplicates + (valid.length - count),
       invalid: summary.invalid,
-      problems,
     };
+    await this.audit.record(actor, {
+      action: "clients.imported",
+      summary: `Imported ${count} client${count === 1 ? "" : "s"} from CSV`,
+      entityType: "client",
+      metadata: result,
+    });
+    const problems: ImportProblemDto[] = results.flatMap((r) =>
+      r.status === "valid" ? [] : [{ row: r.row, status: r.status, reason: r.reason }],
+    );
+    return { ...result, problems };
+  }
+
+  /** The assigned adviser must be an active member of the same brokerage. */
+  private async assertAdviser(actor: SessionUser, adviserId: string | null | undefined) {
+    if (!adviserId) return;
+    const ok = await this.db.user.count({
+      where: { id: adviserId, organisationId: actor.organisationId, deactivatedAt: null },
+    });
+    if (!ok) {
+      throw new NotFoundException({ message: "Adviser not found", field: "assignedAdviserId" });
+    }
   }
 }

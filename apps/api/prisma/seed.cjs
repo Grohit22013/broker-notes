@@ -1,9 +1,11 @@
 /**
- * Demo data for BrokerNotes: one broker account with realistic Australian clients and file notes.
- * Idempotent — re-running replaces the demo account (and only that account).
+ * Demo data for BrokerNotes: a brokerage ("Harbour Home Loans") with an admin, an adviser and a
+ * case manager, realistic Australian clients, file notes and an audit trail.
+ * Idempotent — re-running replaces the demo brokerage (and only that brokerage).
  *
  *   npm run db:seed                     (from the repo root)
- *   SEED_EMAIL / SEED_PASSWORD env vars override the defaults below.
+ *   SEED_EMAIL / SEED_PASSWORD env vars override the admin's defaults below. The adviser and case
+ *   manager sign in with the same password: adviser@brokernotes.dev, casemanager@brokernotes.dev.
  */
 const { PrismaClient } = require("@prisma/client");
 const bcrypt = require("bcryptjs");
@@ -48,22 +50,67 @@ const day = (offset) => zonedMidnight({ ...today, day: today.day + offset });
 const hoursAgo = (h) => new Date(Date.now() - h * 3_600_000);
 
 async function main() {
-  await db.user.deleteMany({ where: { email: EMAIL } });
-  const user = await db.user.create({
-    data: { name: "Demo Broker", email: EMAIL, passwordHash: await bcrypt.hash(PASSWORD, 12) },
+  const ADVISER_EMAIL = "adviser@brokernotes.dev";
+  const CM_EMAIL = "casemanager@brokernotes.dev";
+  // Deleting the brokerage cascades to its members, clients, notes and audit log.
+  await db.organisation.deleteMany({
+    where: { members: { some: { email: { in: [EMAIL, ADVISER_EMAIL, CM_EMAIL] } } } },
   });
+  const org = await db.organisation.create({ data: { name: "Harbour Home Loans" } });
+  const passwordHash = await bcrypt.hash(PASSWORD, 12);
+  const member = (name, email, role, joinedHoursAgo) =>
+    db.user.create({
+      data: {
+        name,
+        email,
+        role,
+        passwordHash,
+        organisationId: org.id,
+        createdAt: hoursAgo(joinedHoursAgo),
+      },
+    });
+  const user = await member("Demo Broker", EMAIL, "ADMIN", 400);
+  const adviser = await member("Priya Sharma", ADVISER_EMAIL, "ADVISER", 300);
+  const caseManager = await member("Sam Lee", CM_EMAIL, "CASE_MANAGER", 250);
 
-  const client = (name, email, phone) =>
-    db.client.create({ data: { userId: user.id, name, email, phone } });
-  const nguyen = await client("Nguyen family", "nguyen@example.com", "0400 123 456");
-  const patel = await client("Asha & Raj Patel", "patel@example.com", "0411 222 333");
-  const smith = await client("Chloe Smith", "chloe.smith@example.com", "0422 333 444");
-  const obrien = await client("Liam O’Brien", "liam@example.com", null);
+  const audit = (actor, action, summary, hours, extra = {}) =>
+    db.auditLog.create({
+      data: {
+        organisationId: org.id,
+        userId: actor.id,
+        action,
+        summary,
+        createdAt: hoursAgo(hours),
+        ...extra,
+      },
+    });
+  await audit(user, "organisation.created", "Created the brokerage “Harbour Home Loans”", 400);
+  await audit(user, "member.invited", `Invited ${ADVISER_EMAIL} as Adviser`, 301);
+  await audit(adviser, "member.joined", "Joined as Adviser", 300);
+  await audit(user, "member.invited", `Invited ${CM_EMAIL} as Case manager`, 251);
+  await audit(caseManager, "member.joined", "Joined as Case manager", 250);
 
-  /** @type {Array<{client: any, template?: string, title?: string, type?: string, stage: string|null, tags: string[], pinned?: boolean, followUp?: Date, kf?: object, body: object, hours: number, finalise?: string[]}>} */
+  const client = (name, email, phone, adviserId) =>
+    db.client.create({
+      data: {
+        organisationId: org.id,
+        userId: user.id,
+        assignedAdviserId: adviserId ?? null,
+        name,
+        email,
+        phone,
+      },
+    });
+  const nguyen = await client("Nguyen family", "nguyen@example.com", "0400 123 456", adviser.id);
+  const patel = await client("Asha & Raj Patel", "patel@example.com", "0411 222 333", adviser.id);
+  const smith = await client("Chloe Smith", "chloe.smith@example.com", "0422 333 444", user.id);
+  const obrien = await client("Liam O’Brien", "liam@example.com", null, user.id);
+
+  /** @type {Array<{client: any, author?: any, template?: string, title?: string, type?: string, stage: string|null, tags: string[], pinned?: boolean, followUp?: Date, kf?: object, body: object, hours: number, finalise?: string[]}>} */
   const notes = [
     {
       client: nguyen,
+      author: adviser,
       template: "discovery",
       stage: "LEAD",
       tags: ["first-home", "fhog"],
@@ -93,6 +140,7 @@ async function main() {
     },
     {
       client: patel,
+      author: caseManager,
       template: "conditions",
       stage: "CONDITIONAL",
       tags: ["anz", "investor"],
@@ -166,6 +214,7 @@ async function main() {
     },
     {
       client: nguyen,
+      author: adviser,
       template: "review",
       stage: "REVIEW",
       tags: ["refinance"],
@@ -201,9 +250,11 @@ async function main() {
 
   for (const n of notes) {
     const tpl = noteFromTemplate(n.template, n.client.name);
+    const author = n.author ?? user;
     const created = await db.note.create({
       data: {
-        userId: user.id,
+        organisationId: org.id,
+        userId: author.id,
         clientId: n.client.id,
         title: tpl.title,
         noteType: tpl.noteType,
@@ -222,14 +273,27 @@ async function main() {
         ...(n.finalise ? { status: "FINALISED", finalisedAt: hoursAgo(n.hours) } : {}),
       },
     });
+    const ref = { entityType: "note", entityId: created.id };
+    await audit(author, "note.created", `Created “${tpl.title}”`, n.hours + 1, ref);
+    if (n.finalise) await audit(author, "note.finalised", `Finalised “${tpl.title}”`, n.hours, ref);
     for (const body of n.finalise ?? []) {
       await db.noteAmendment.create({ data: { noteId: created.id, body } });
+      await audit(author, "note.amended", `Added an amendment to “${tpl.title}”`, n.hours, ref);
     }
   }
+  await audit(user, "export.clients", "Exported 4 clients to CSV", 20, {
+    entityType: "export",
+    metadata: { count: 4 },
+  });
+  await audit(adviser, "auth.signed_in", "Signed in", 3);
+  await audit(user, "auth.signed_in", "Signed in", 1);
 
   // Never print the password itself (it may be a real secret from SEED_PASSWORD).
   const source = process.env.SEED_PASSWORD ? "SEED_PASSWORD" : "the documented demo default";
-  console.log(`Seeded ${EMAIL} (password from ${source}) — 4 clients, ${notes.length} notes.`);
+  console.log(
+    `Seeded “Harbour Home Loans”: ${EMAIL} (admin), ${ADVISER_EMAIL}, ${CM_EMAIL} ` +
+      `(password from ${source}) — 4 clients, ${notes.length} notes.`,
+  );
 }
 
 main()

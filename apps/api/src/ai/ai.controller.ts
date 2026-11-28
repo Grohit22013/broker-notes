@@ -36,7 +36,7 @@ export class AiController {
     @CurrentUser() user: SessionUser,
     @Param("id", idPipe) id: string,
   ): Promise<NoteAnalysisDto | null> {
-    return this.ai.latest(user.id, id);
+    return this.ai.latest(user, id);
   }
 
   @Post("notes/:id/analysis")
@@ -56,6 +56,6 @@ export class AiController {
     @Param("id", idPipe) id: string,
     @Body(new ZodPipe(analyseBody)) body: z.output<typeof analyseBody>,
   ): Promise<NoteAnalysisDto> {
-    return this.ai.analyse(user.id, id, body.force);
+    return this.ai.analyse(user, id, body.force);
   }
 }
