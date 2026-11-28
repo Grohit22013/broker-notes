@@ -103,6 +103,7 @@ describe("buildNoteWhere", () => {
             { title: { contains: "anz", mode: "insensitive" } },
             { contentText: { contains: "anz", mode: "insensitive" } },
             { client: { name: { contains: "anz", mode: "insensitive" } } },
+            { case: { reference: { contains: "anz", mode: "insensitive" } } },
           ],
         },
         { loanStage: "LEAD" },

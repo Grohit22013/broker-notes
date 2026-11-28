@@ -50,6 +50,8 @@ export const updateNoteMetaSchema = z.object({
     .optional(),
   pinned: z.boolean().optional(),
   clientId: z.cuid({ error: "Invalid client" }).nullable().optional(),
+  /** Linking a case also links its client. */
+  caseId: z.cuid({ error: "Invalid case" }).nullable().optional(),
   keyFigures: keyFiguresSchema.nullable().optional(),
 });
 
@@ -67,4 +69,5 @@ export const amendmentSchema = z.object({
 export const noteTemplateSchema = z.object({
   templateId: z.string().max(40).default("blank"),
   clientId: z.cuid().optional().catch(undefined),
+  caseId: z.cuid().optional().catch(undefined),
 });
