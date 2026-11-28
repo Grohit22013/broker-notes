@@ -144,6 +144,15 @@ Browser ─► Next.js (apps/web) ─/api/* proxy─► NestJS (apps/api) ─►
 | **Shared**   | One set of Zod schemas validates the forms _and_ the API, so the two can never disagree           |
 | **Hosting**  | Vercel (web), Render (API), Neon (DB): see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)               |
 
+**Full architecture diagram:** [docs/architecture/brokernotes-architecture.drawio](docs/architecture/brokernotes-architecture.drawio)
+has 14 pages. Open it in [draw.io](https://app.diagrams.net) or the VS Code Draw.io extension.
+
+| Pages | What they cover                                                                                                                                 |
+| ----- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| 01–04 | Overview, reference architecture, layers, components                                                                                            |
+| 05–09 | One client meeting from start to finish, the AI core, the data model and audit trail, what the AI sees and returns, autosave and edit conflicts |
+| 10–14 | The human decision points, user flow, security and guardrails, external connections, infrastructure                                             |
+
 ## Security and privacy
 
 - **Isolation:** every query is scoped to the member's **brokerage**. Another brokerage's note, client, member,
