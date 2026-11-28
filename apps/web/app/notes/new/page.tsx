@@ -5,13 +5,14 @@ import { PageHeader } from "@/components/shared/page-header";
 import { requireUser } from "@/lib/auth/session";
 import { caseOptions, clientOptions, orgTemplates } from "@/lib/api/queries";
 import { BLANK_TEMPLATE_ID, TEMPLATES } from "@broker-notes/shared/notes/templates";
+import { canManageClients } from "@broker-notes/shared/orgs/roles";
 
 export const metadata: Metadata = { title: "New note" };
 
 type Props = { searchParams: Promise<{ client?: string; case?: string }> };
 
 export default async function NewNotePage({ searchParams }: Props) {
-  await requireUser();
+  const user = await requireUser();
   const [{ client, case: caseId }, clients, cases, own] = await Promise.all([
     searchParams,
     clientOptions(),
@@ -32,6 +33,7 @@ export default async function NewNotePage({ searchParams }: Props) {
         clients={clients}
         defaultClientId={defaultClientId}
         forCase={forCase ? { id: forCase.id, reference: forCase.reference } : undefined}
+        canAddClients={canManageClients(user)}
         orgTemplates={own.map((t) => ({
           id: t.id,
           name: t.name,

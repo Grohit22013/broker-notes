@@ -30,16 +30,33 @@ import type { UserRefDto } from "@broker-notes/shared/dto";
 const NO_ADVISER = "__none__";
 
 type Props = {
-  trigger: React.ReactNode;
+  /** Button that opens the dialog. Omit when the parent controls `open` itself. */
+  trigger?: React.ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  /** Called with the new client instead of navigating to its page (e.g. from New note). */
+  onCreated?: (client: { id: string; name: string }) => void;
   /** When given, the dialog edits this client; otherwise it creates a new one. */
   client?: ClientDto;
   /** Active members who can be assigned as the client's adviser. */
   advisers?: UserRefDto[];
 };
 
-export function ClientFormDialog({ trigger, client, advisers = [] }: Props) {
+export function ClientFormDialog({
+  trigger,
+  client,
+  advisers = [],
+  open: controlledOpen,
+  onOpenChange,
+  onCreated,
+}: Props) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const open = controlledOpen ?? uncontrolledOpen;
+  const setOpen = (o: boolean) => {
+    setUncontrolledOpen(o);
+    onOpenChange?.(o);
+  };
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<{ field?: string; message: string } | null>(null);
   const [adviserId, setAdviserId] = useState(client?.assignedAdviser?.id ?? NO_ADVISER);
@@ -62,6 +79,7 @@ export function ClientFormDialog({ trigger, client, advisers = [] }: Props) {
       setOpen(false);
       toast.success(client ? "Client updated" : `Client “${res.client.name}” added`);
       if (client) router.refresh();
+      else if (onCreated) onCreated({ id: res.client.id, name: res.client.name });
       else router.push(`/clients/${res.client.id}`);
     });
   };
@@ -81,7 +99,7 @@ export function ClientFormDialog({ trigger, client, advisers = [] }: Props) {
         if (!o) setError(null);
       }}
     >
-      <DialogTrigger asChild>{trigger}</DialogTrigger>
+      {trigger ? <DialogTrigger asChild>{trigger}</DialogTrigger> : null}
       <DialogContent className="sm:max-w-md">
         <form onSubmit={submit} className="space-y-4" noValidate>
           <DialogHeader>

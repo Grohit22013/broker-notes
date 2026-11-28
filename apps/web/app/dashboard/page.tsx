@@ -19,7 +19,10 @@ import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { requireUser } from "@/lib/auth/session";
-import { activeMembers, getDashboard } from "@/lib/api/queries";
+import { activeMembers, getCalendar, getDashboard } from "@/lib/api/queries";
+import { MiniCalendar } from "@/components/calendar/mini-calendar";
+import { gridRange } from "@broker-notes/shared/calendar";
+import { toIsoDate, zonedYmd } from "@broker-notes/shared/dates";
 import { TaskList } from "@/components/tasks/task-list";
 import { formatRelative } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -42,7 +45,15 @@ function greeting(now = new Date()) {
 
 export default async function DashboardPage() {
   const user = await requireUser();
-  const [d, members] = await Promise.all([getDashboard(), activeMembers()]);
+  const now = new Date();
+  const today = toIsoDate(now);
+  const { year, month } = zonedYmd(now);
+  const range = gridRange(year, month);
+  const [d, members, calendar] = await Promise.all([
+    getDashboard(),
+    activeMembers(),
+    getCalendar(range.from, range.to),
+  ]);
   const pipelineTotal = d.pipeline.reduce((n, p) => n + p.count, 0);
 
   const stats: { label: string; value: number; href: string; icon: LucideIcon; hint: string }[] = [
@@ -119,7 +130,7 @@ export default async function DashboardPage() {
       </ul>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="grid min-w-0 grid-cols-1 gap-6 lg:col-span-2">
+        <div className="grid min-w-0 grid-cols-1 content-start gap-6 lg:col-span-2">
           <section aria-labelledby="my-tasks" className="min-w-0">
             <div className="mb-2 flex items-center justify-between">
               <h2 id="my-tasks" className="flex items-center gap-2 font-semibold">
@@ -170,6 +181,7 @@ export default async function DashboardPage() {
         </div>
 
         <div className="grid min-w-0 grid-cols-1 content-start gap-6">
+          <MiniCalendar initial={{ year, month, data: calendar }} today={today} />
           <section aria-labelledby="pipeline-title" className="bg-card rounded-xl border p-4">
             <div className="mb-3 flex items-center justify-between">
               <h2 id="pipeline-title" className="flex items-center gap-2 font-semibold">

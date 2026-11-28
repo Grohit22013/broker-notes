@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   ClipboardCopy,
   ListChecks,
+  CalendarSearch,
   Loader2,
   RefreshCw,
   ShieldCheck,
@@ -23,6 +24,7 @@ import { formatAud } from "@broker-notes/shared/money";
 
 import type { NoteEditorApi } from "@/components/editor/note-editor";
 import { useNoteDetails } from "@/components/notes/note-details";
+import { SpottedDates } from "@/components/notes/spotted-dates";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -332,6 +334,17 @@ export function AiPanel({
                   ) : (
                     <p className="text-muted-foreground text-sm">No action items found.</p>
                   )}
+                </Section>
+
+                <Section title="Dates found" icon={CalendarSearch}>
+                  <SpottedDates
+                    key={result?.analysedAt}
+                    noteId={noteId}
+                    dates={a.dates ?? []}
+                    canEditNote={!finalised}
+                    onSetMeeting={(meetingAt) => update({ meetingAt })}
+                    onSetFollowUp={(followUpDate) => update({ followUpDate })}
+                  />
                 </Section>
 
                 <Section title="Key figures" icon={CheckCircle2}>

@@ -55,6 +55,7 @@ export type UpdateNoteMetaInput = {
   loanStage?: LoanStageValue | null;
   tags?: string[];
   followUpDate?: string | null;
+  meetingAt?: string | null;
   pinned?: boolean;
   clientId?: string | null;
   caseId?: string | null;
