@@ -12,13 +12,14 @@ import {
   analysisInput,
   analysisSchema,
   buildUserPrompt,
+  docToAiText,
   type Analysis,
 } from "@broker-notes/shared/ai/analysis";
 import { AI_DAILY_LIMIT, isFreeModel } from "@broker-notes/shared/ai/config";
 import { redact } from "@broker-notes/shared/ai/redact";
-import { startOfZonedDay, toIsoDate } from "@broker-notes/shared/dates";
+import { startOfZonedDay, toIsoDate, toLocalDateTime } from "@broker-notes/shared/dates";
 import type { AiStatusDto, NoteAnalysisDto } from "@broker-notes/shared/dto";
-import { displayTitle } from "@broker-notes/shared/notes/content";
+import { displayTitle, isDocJson } from "@broker-notes/shared/notes/content";
 
 import { AuditService } from "../audit/audit.service";
 import type { SessionUser } from "../auth/auth.guard";
@@ -30,6 +31,19 @@ import { OpenRouterClient } from "./openrouter.client";
 const MIN_TEXT = 20;
 
 const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
+
+/** The note body for the AI: structure kept, checklist items marked open/done. */
+function aiTextOf(n: { contentJson: unknown; contentText: string }): string {
+  return isDocJson(n.contentJson) ? docToAiText(n.contentJson) : n.contentText;
+}
+
+/** Dates already in the note's details (Sydney time), so the AI doesn't suggest them again. */
+function scheduledOf(n: { meetingAt: Date | null; followUpAt: Date | null }) {
+  return {
+    meeting: n.meetingAt ? toLocalDateTime(n.meetingAt).replace("T", " ") : null,
+    followUp: n.followUpAt ? toIsoDate(n.followUpAt) : null,
+  };
+}
 
 /** e.g. "Saturday 2026-11-28" — lets the model resolve "next Tuesday" in the broker's zone. */
 function todayInSydney(now = new Date()): string {
@@ -116,7 +130,7 @@ export class AiService {
 
     // Redact identifiers from BOTH title and body before anything leaves the server.
     const title = redact(note.title);
-    const body = redact(note.contentText);
+    const body = redact(aiTextOf(note));
     const counts = Object.fromEntries(
       Object.keys(body.counts).map((k) => [
         k,
@@ -131,6 +145,7 @@ export class AiService {
         noteType: note.noteType,
         loanStage: note.loanStage,
         today: todayInSydney(),
+        scheduled: scheduledOf(note),
       }),
     );
     await this.db.aiUsage.create({
@@ -180,6 +195,9 @@ export class AiService {
       select: {
         title: true,
         contentText: true,
+        contentJson: true,
+        meetingAt: true,
+        followUpAt: true,
         noteType: true,
         loanStage: true,
         updatedAt: true,
@@ -193,13 +211,19 @@ export class AiService {
     return note;
   }
 
-  private hashOf(n: {
-    title: string;
-    contentText: string;
-    noteType: string;
-    loanStage: string | null;
-  }) {
-    return sha256(analysisInput(n.title, n.contentText, n.noteType, n.loanStage));
+  /** What the model sees — re-analyse when it changes (incl. ticking a checklist item). */
+  private hashOf(
+    n: Parameters<typeof aiTextOf>[0] & {
+      title: string;
+      noteType: string;
+      loanStage: string | null;
+      meetingAt: Date | null;
+      followUpAt: Date | null;
+    },
+  ) {
+    const s = scheduledOf(n);
+    const text = `${aiTextOf(n)}\n${s.meeting ?? ""}|${s.followUp ?? ""}`;
+    return sha256(analysisInput(n.title, text, n.noteType, n.loanStage));
   }
 
   /** Requests (successful or not) since midnight Sydney time — failed calls still used quota. */

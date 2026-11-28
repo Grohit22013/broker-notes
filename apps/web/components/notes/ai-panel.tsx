@@ -344,6 +344,7 @@ export function AiPanel({
                     canEditNote={!finalised}
                     onSetMeeting={(meetingAt) => update({ meetingAt })}
                     onSetFollowUp={(followUpDate) => update({ followUpDate })}
+                    existing={{ meetingAt: meta.meetingAt, followUpDate: meta.followUpDate }}
                   />
                 </Section>
 
