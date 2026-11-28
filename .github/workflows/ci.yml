@@ -1,16 +1,15 @@
 # ──────────────────────────────────────────────────────────────────────────────
-# CI pipeline for BrokerNotes
+# CI pipeline for the BrokerNotes monorepo
+#   apps/web (Next.js) · apps/api (NestJS) · packages/shared
 #
 #   lint ─┐
 #   format ┤
-#   typecheck ┼──► ✅ CI passed  (single required status check)
-#   unit-tests ┤
-#   database ┤
+#   typecheck ┤
+#   unit-tests ┤   (shared + web: Vitest w/ coverage · api: Jest)
+#   database ┼──► ✅ CI passed  (single required status check)
+#   api-integration ┤  (NestJS app over HTTP against Postgres 17)
 #   build ┤
-#   e2e ─┘   (Playwright, desktop + mobile, real Postgres)
-#
-# Every check is its own job so a PR shows exactly what failed, and the jobs
-# run in parallel. Each job writes a short report to the run's Summary page.
+#   e2e ─┘   (Playwright, desktop + mobile, API + web + Postgres)
 # ──────────────────────────────────────────────────────────────────────────────
 name: CI
 
@@ -21,11 +20,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# Least privilege by default; jobs opt in to more if they need it.
 permissions:
   contents: read
 
-# Cancel superseded runs on the same branch/PR.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -33,13 +30,13 @@ concurrency:
 env:
   NODE_VERSION: 20
   NEXT_TELEMETRY_DISABLED: 1
-  # Placeholders so Prisma generate / Next build work without real secrets.
+  # CI-only values (no real secrets). The API and web app must share AUTH_SECRET.
   DATABASE_URL: postgresql://postgres:postgres@localhost:5432/brokernotes_ci
   DIRECT_URL: postgresql://postgres:postgres@localhost:5432/brokernotes_ci
-  AUTH_SECRET: ci-only-not-a-real-secret
+  AUTH_SECRET: ci-only-not-a-real-secret-0123456789
+  API_URL: http://localhost:4000
 
 jobs:
-  # ── 🔍 ESLint ──────────────────────────────────────────────────────────────
   lint:
     name: 🔍 Lint
     runs-on: ubuntu-latest
@@ -51,14 +48,12 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
       - run: npm ci
-      # setup-node registers ESLint problem matchers → errors show inline on the PR diff.
-      - name: ESLint
+      - name: ESLint (all workspaces)
         run: npx eslint . --max-warnings=0
       - name: Summary
         if: success()
-        run: echo "### 🔍 Lint — ✅ no ESLint errors or warnings" >> "$GITHUB_STEP_SUMMARY"
+        run: echo "### 🔍 Lint — ✅ no ESLint errors or warnings (web, api, shared)" >> "$GITHUB_STEP_SUMMARY"
 
-  # ── 🎨 Prettier ────────────────────────────────────────────────────────────
   format:
     name: 🎨 Format
     runs-on: ubuntu-latest
@@ -85,7 +80,6 @@ jobs:
           fi
           echo "### 🎨 Format — ✅ all files match Prettier style" >> "$GITHUB_STEP_SUMMARY"
 
-  # ── 🔷 TypeScript ──────────────────────────────────────────────────────────
   typecheck:
     name: 🔷 Typecheck
     runs-on: ubuntu-latest
@@ -96,14 +90,13 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-      - run: npm ci # postinstall runs `prisma generate` so Prisma types exist
-      - name: tsc --noEmit
-        run: npx tsc --noEmit --pretty false
+      - run: npm ci # api postinstall runs `prisma generate`
+      - name: tsc --noEmit (shared → api → web)
+        run: npm run typecheck
       - name: Summary
         if: success()
-        run: echo "### 🔷 Typecheck — ✅ no TypeScript errors (strict mode)" >> "$GITHUB_STEP_SUMMARY"
+        run: echo "### 🔷 Typecheck — ✅ no TypeScript errors in web, api or shared (strict mode)" >> "$GITHUB_STEP_SUMMARY"
 
-  # ── 🧪 Vitest + coverage ───────────────────────────────────────────────────
   unit-tests:
     name: 🧪 Unit tests
     runs-on: ubuntu-latest
@@ -115,44 +108,79 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
       - run: npm ci
-      - name: Vitest (coverage thresholds enforced)
-        run: npx vitest run --coverage
-      - name: Test & coverage summary
+      - run: npm run build:shared # web tests import the compiled shared package
+      - name: packages/shared (Vitest, coverage enforced)
+        run: npm run test:coverage -w @broker-notes/shared
+      - name: apps/web (Vitest, coverage enforced)
+        run: npm run test:coverage -w @broker-notes/web
+      - name: apps/api (Jest)
+        run: npm test -w @broker-notes/api
+      - name: Summary
         if: always()
         run: |
-          node <<'EOF' >> "$GITHUB_STEP_SUMMARY"
-          const fs = require("fs");
-          const out = [];
-          if (fs.existsSync("reports/junit.xml")) {
-            const x = fs.readFileSync("reports/junit.xml", "utf8");
-            const m = x.match(/<testsuites[^>]*tests="(\d+)"[^>]*failures="(\d+)"[^>]*errors="(\d+)"[^>]*time="([\d.]+)"/);
-            if (m) {
-              const [, tests, failures, errors, time] = m;
-              const failed = Number(failures) + Number(errors);
-              out.push(`### 🧪 Unit tests — ${failed ? "❌" : "✅"} ${tests - failed}/${tests} passed in ${Number(time).toFixed(2)}s`);
-            }
-          }
-          if (fs.existsSync("coverage/coverage-summary.json")) {
-            const t = JSON.parse(fs.readFileSync("coverage/coverage-summary.json", "utf8")).total;
-            const row = (k, label, min) => `| ${label} | ${t[k].pct}% | ${t[k].covered}/${t[k].total} | ${min}% | ${t[k].pct >= min ? "✅" : "❌"} |`;
-            out.push("", "**Coverage (`lib/`)**", "", "| Metric | % | Covered | Threshold | |", "|---|---|---|---|---|",
-              row("lines", "Lines", 70), row("statements", "Statements", 70), row("functions", "Functions", 70), row("branches", "Branches", 60));
-          }
-          console.log(out.join("\n"));
-          EOF
-      - name: Upload coverage report
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: coverage-report
-          path: coverage/
-          retention-days: 7
+          node .github/scripts/test-summary.cjs "🧪 shared" packages/shared/reports/junit.xml packages/shared/coverage/coverage-summary.json >> "$GITHUB_STEP_SUMMARY"
+          node .github/scripts/test-summary.cjs "🧪 web" apps/web/reports/junit.xml apps/web/coverage/coverage-summary.json >> "$GITHUB_STEP_SUMMARY"
 
-  # ── 🗄️ Database (real Postgres) ────────────────────────────────────────────
   database:
     name: 🗄️ Database schema & migrations
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: brokernotes_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+        working-directory: .
+      - name: Validate schema
+        run: npx prisma validate
+      - name: Check schema formatting
+        run: npx prisma format --check
+      - name: Apply all migrations to a fresh database
+        run: npx prisma migrate deploy
+      - name: Detect drift (schema.prisma changed without a migration)
+        run: |
+          npx prisma migrate diff \
+            --from-url "$DATABASE_URL" \
+            --to-schema-datamodel prisma/schema.prisma \
+            --exit-code \
+            && echo "No drift" \
+            || { echo "::error file=apps/api/prisma/schema.prisma::schema.prisma has changes not captured in a migration. Run \`npm run db:migrate\`."; exit 1; }
+      - name: Summary
+        if: always()
+        run: |
+          count=$(ls -d prisma/migrations/*/ 2>/dev/null | wc -l | tr -d ' ')
+          {
+            echo "### 🗄️ Database — ${{ job.status == 'success' && '✅' || '❌' }}"
+            echo "| Check | Result |"
+            echo "|---|---|"
+            echo "| Postgres | 17 (service container) |"
+            echo "| Migrations applied | ${count} |"
+            echo "| Schema valid & formatted | ${{ job.status == 'success' && '✅' || 'see logs' }} |"
+            echo "| Drift vs. migrations | ${{ job.status == 'success' && '✅ none' || 'see logs' }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  api-integration:
+    name: 🔌 API integration (NestJS + Postgres)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     services:
       postgres:
         image: postgres:17
@@ -173,35 +201,18 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
       - run: npm ci
-      - name: Validate schema
-        run: npx prisma validate
-      - name: Check schema formatting
-        run: npx prisma format --check
-      - name: Apply all migrations to a fresh database
-        run: npx prisma migrate deploy
-      - name: Detect drift (schema.prisma changed without a migration)
-        run: |
-          npx prisma migrate diff \
-            --from-url "$DATABASE_URL" \
-            --to-schema-datamodel prisma/schema.prisma \
-            --exit-code \
-            && echo "No drift" \
-            || { echo "::error file=prisma/schema.prisma::schema.prisma has changes not captured in a migration. Run \`npm run db:migrate\`."; exit 1; }
+      - run: npm run build:shared
+      - name: Apply migrations
+        run: npm run db:deploy -w @broker-notes/api
+      - name: Integration tests (auth, isolation, notes, finalise, clients, CSV)
+        run: npm run test:int -w @broker-notes/api 2>&1 | tee int.log; exit ${PIPESTATUS[0]}
       - name: Summary
         if: always()
         run: |
-          count=$(ls -d prisma/migrations/*/ 2>/dev/null | wc -l | tr -d ' ')
-          {
-            echo "### 🗄️ Database — ${{ job.status == 'success' && '✅' || '❌' }}"
-            echo "| Check | Result |"
-            echo "|---|---|"
-            echo "| Postgres | 17 (service container) |"
-            echo "| Migrations applied | ${count} |"
-            echo "| Schema valid & formatted | ${{ job.status == 'success' && '✅' || 'see logs' }} |"
-            echo "| Drift vs. migrations | ${{ job.status == 'success' && '✅ none' || 'see logs' }} |"
-          } >> "$GITHUB_STEP_SUMMARY"
+          line=$(grep -E "^Tests:" int.log | tail -1)
+          if grep -qE "failed" <<<"$line"; then icon="❌"; else icon="✅"; fi
+          echo "### 🔌 API integration — ${icon} ${line#Tests: }" >> "$GITHUB_STEP_SUMMARY"
 
-  # ── 🏗️ Next.js production build ────────────────────────────────────────────
   build:
     name: 🏗️ Build
     runs-on: ubuntu-latest
@@ -216,29 +227,28 @@ jobs:
       - name: Restore Next.js build cache
         uses: actions/cache@v6
         with:
-          path: .next/cache
-          key: nextjs-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ hashFiles('**/*.ts', '**/*.tsx', '**/*.css') }}
+          path: apps/web/.next/cache
+          key: nextjs-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ hashFiles('apps/web/**/*.ts', 'apps/web/**/*.tsx', 'apps/web/**/*.css', 'packages/shared/src/**') }}
           restore-keys: |
             nextjs-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-
-      - name: next build
+      - name: Build shared → api → web
         run: npm run build 2>&1 | tee build.log; exit ${PIPESTATUS[0]}
       - name: Bundle size summary
         if: success()
         run: |
           {
-            echo "### 🏗️ Build — ✅ production build succeeded"
+            echo "### 🏗️ Build — ✅ shared, api (NestJS) and web (Next.js) built"
             echo ""
-            echo "**Routes & bundle sizes**"
+            echo "**Web routes & bundle sizes**"
             echo '```'
             sed -n '/^Route (app)/,/^$/p' build.log
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-  # ── 🎭 Playwright end-to-end (desktop + mobile) against real Postgres ──────
   e2e:
     name: 🎭 E2E (Playwright)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     services:
       postgres:
         image: postgres:17
@@ -260,7 +270,7 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Apply migrations
-        run: npx prisma migrate deploy
+        run: npm run db:deploy -w @broker-notes/api
       - name: Cache Playwright browsers
         id: pw-cache
         uses: actions/cache@v6
@@ -273,45 +283,25 @@ jobs:
       - name: Install Chromium system deps (cache hit)
         if: steps.pw-cache.outputs.cache-hit == 'true'
         run: npx playwright install-deps chromium
-      - name: Build
+      - name: Build shared → api → web
         run: npm run build
-      - name: Run E2E tests
-        run: npx playwright test
+      - name: Run E2E tests (starts API + web)
+        run: npm run test:e2e
       - name: E2E summary
         if: always()
-        run: |
-          node <<'EOF' >> "$GITHUB_STEP_SUMMARY"
-          const fs = require("fs");
-          if (!fs.existsSync("reports/e2e.json")) { console.log("### 🎭 E2E — ⚠️ no report produced"); process.exit(0); }
-          const r = JSON.parse(fs.readFileSync("reports/e2e.json", "utf8"));
-          const rows = [];
-          const walk = (suite, path = []) => {
-            for (const s of suite.suites ?? []) walk(s, s.title && !s.title.endsWith(".ts") ? [...path, s.title] : path);
-            for (const spec of suite.specs ?? []) for (const t of spec.tests) {
-              const res = t.results.at(-1);
-              const icon = { expected: "✅", flaky: "⚠️", unexpected: "❌", skipped: "⏭️" }[t.status] ?? t.status;
-              rows.push(`| ${icon} | ${t.projectName} | ${[...path, spec.title].join(" › ")} | ${((res?.duration ?? 0) / 1000).toFixed(1)}s |`);
-            }
-          };
-          walk(r);
-          const st = r.stats;
-          const icon = st.unexpected ? "❌" : st.flaky ? "⚠️" : "✅";
-          console.log(`### 🎭 E2E — ${icon} ${st.expected} passed, ${st.unexpected} failed, ${st.flaky} flaky (${(st.duration / 1000).toFixed(1)}s)\n`);
-          console.log("| | Viewport | Test | Time |\n|---|---|---|---|\n" + rows.join("\n"));
-          EOF
+        run: node .github/scripts/e2e-summary.cjs apps/web/reports/e2e.json >> "$GITHUB_STEP_SUMMARY"
       - name: Upload Playwright report
         if: failure()
         uses: actions/upload-artifact@v7
         with:
           name: playwright-report
-          path: playwright-report/
+          path: apps/web/playwright-report/
           retention-days: 7
 
-  # ── ✅ Single gate for branch protection ───────────────────────────────────
   ci-passed:
     name: ✅ CI passed
     if: always()
-    needs: [lint, format, typecheck, unit-tests, database, build, e2e]
+    needs: [lint, format, typecheck, unit-tests, database, api-integration, build, e2e]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

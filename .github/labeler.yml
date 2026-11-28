@@ -17,6 +17,8 @@ phase-6:
   - head-branch: ["^phase-6/"]
 phase-7:
   - head-branch: ["^phase-7/"]
+phase-8:
+  - head-branch: ["^phase-8/"]
 
 # ── Area labels from the files changed ──
 "area: ci":
@@ -24,20 +26,29 @@ phase-7:
       - any-glob-to-any-file: [".github/**", ".husky/**"]
 "area: ui":
   - changed-files:
-      - any-glob-to-any-file: ["components/**", "app/**/*.tsx", "app/globals.css"]
+      - any-glob-to-any-file:
+          ["apps/web/components/**", "apps/web/app/**/*.tsx", "apps/web/app/globals.css"]
+"area: api":
+  - changed-files:
+      - any-glob-to-any-file: ["apps/api/src/**", "apps/api/test/**"]
 "area: db":
   - changed-files:
-      - any-glob-to-any-file: ["prisma/**", "lib/db.ts"]
+      - any-glob-to-any-file: ["apps/api/prisma/**", "apps/api/src/prisma/**"]
 "area: auth":
   - changed-files:
       - any-glob-to-any-file:
-          ["auth.ts", "auth.config.ts", "middleware.ts", "app/(auth)/**", "lib/auth/**"]
+          [
+            "apps/api/src/auth/**",
+            "apps/web/middleware.ts",
+            "apps/web/app/(auth)/**",
+            "apps/web/lib/auth/**",
+          ]
 "area: ai":
   - changed-files:
-      - any-glob-to-any-file: ["lib/ai*", "lib/redact*", "app/**/ai-*"]
+      - any-glob-to-any-file: ["**/ai/**", "**/*redact*"]
 "area: editor":
   - changed-files:
-      - any-glob-to-any-file: ["components/editor/**"]
+      - any-glob-to-any-file: ["apps/web/components/editor/**"]
 dependencies:
   - changed-files:
-      - any-glob-to-any-file: ["package.json", "package-lock.json"]
+      - any-glob-to-any-file: ["**/package.json", "package-lock.json"]
