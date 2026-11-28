@@ -21,7 +21,8 @@
     "check": "npm run lint && npm run typecheck && npm run test && npm run format:check",
     "db:migrate": "npm run db:migrate -w @broker-notes/api",
     "db:studio": "npm run db:studio -w @broker-notes/api",
-    "prepare": "husky"
+    "prepare": "husky",
+    "db:seed": "npm run build:shared && npm run db:seed -w @broker-notes/api"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
