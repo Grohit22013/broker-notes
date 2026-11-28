@@ -1,47 +1,114 @@
 # BrokerNotes
 
-AI-assisted, compliance-grade file notes for Australian mortgage brokers.
-A **separate frontend and backend** in one monorepo: a **Next.js** web app (Tiptap editor) and a **NestJS** REST API, with **Prisma + Postgres (Neon)**.
+**Compliance-grade file notes for Australian mortgage brokers.** Take a note in a rich editor, see all your
+notes in one searchable list, and keep a record that stands up to an ASIC Best Interests Duty review.
+AI assistance runs on free models only.
 
-> 🚧 Built phase by phase through pull requests. See [`SCRATCHPAD.md`](SCRATCHPAD.md) for progress, decisions and how AI was used. The full write-up comes in Phase 7.
+[![CI](https://github.com/Grohit22013/broker-notes/actions/workflows/ci.yml/badge.svg)](https://github.com/Grohit22013/broker-notes/actions/workflows/ci.yml)
+
+> **Live demo:** _URL added after deployment (see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md))._
+> Demo login: `demo@brokernotes.dev` / `demo1234`
+
+| Notes list                                                      | Tiptap editor                                               | AI assist                                                     |
+| --------------------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------- |
+| <img src="docs/screenshots/notes-list-desktop.png" width="300"> | <img src="docs/screenshots/editor-desktop.png" width="300"> | <img src="docs/screenshots/ai-panel-desktop.png" width="300"> |
+
+| Mobile list                                                    | Mobile editor                                              | Finalised note + amendment                                     | Clients                                                     |
+| -------------------------------------------------------------- | ---------------------------------------------------------- | -------------------------------------------------------------- | ----------------------------------------------------------- |
+| <img src="docs/screenshots/notes-list-mobile.png" width="150"> | <img src="docs/screenshots/editor-mobile.png" width="150"> | <img src="docs/screenshots/finalised-desktop.png" width="260"> | <img src="docs/screenshots/clients-mobile.png" width="150"> |
+
+---
+
+## The assignment
+
+> Create a Next.js application where the user can take notes and view the list of their notes. The note editor
+> should use the Tiptap editor plugin. You should use AI to code this. Consider the user base as mortgage brokers.
+
+**What I built:** a full-stack app with a **Next.js + Tiptap** frontend and a separate **NestJS** API, designed
+around how **Australian mortgage brokers** actually use file notes.
+
+## Who it's for, and why it's shaped this way
+
+Before writing code, I used AI research agents to study mortgage-broker workflows and the companies behind
+the assignment. The findings shaped the product:
+
+- **Australian brokers must keep file notes.** Under ASIC's **Best Interests Duty (RG 273)**, notes must be
+  written at the time, record the client's requirements, the options compared, why the recommended product
+  suits, and why the alternatives weren't chosen. ASIC criticises boilerplate notes.
+- **Notes are part of a pipeline.** Brokers think in clients and loan stages (lead → pre-approval →
+  conditional → settled → review), follow-ups, conditions and key figures (loan amount, LVR, rate, lender).
+- **Brokers work on the move**, between client meetings, so the app is **mobile-first**.
+
+## Features
+
+**✍️ Notes (Tiptap editor)**
+
+- **Formatting:** headings, bold, italic, underline, strikethrough and highlight; bullet, numbered and **checklist** lists; **tables** for lender comparisons; links; Markdown shortcuts; word count.
+- **Autosave you can trust:** saves after a short pause, **at least every 5 seconds while typing**, and **when the app is backgrounded on a phone**. Ctrl+S saves straight away, a failed save offers retry, and the browser warns before you leave with unsaved changes.
+- **Mobile-first:** the toolbar sticks to the top and scrolls sideways, with 44px touch targets.
+
+**🗂️ Notes list**
+
+- **Search** across title, body and client name, with highlighted matches.
+- **Filters:** loan stage, note type, tag and client. **Sort:** last edited, created, follow-up date or A–Z.
+- **Pinned notes first**, plus a **"Follow-ups due"** view (overdue and today, on the Sydney calendar, daylight saving included).
+- **Shareable URLs:** filter state lives in the URL, so a filtered view can be bookmarked or sent.
+
+**🏦 Broker features**
+
+- **Clients:** client records with a timeline of their notes.
+- **Templates:** 6 broker templates (discovery call, fact find, **best-interests / lender rationale**, conditions tracker, settlement, annual review).
+- **Key loan figures:** type `850k` or `$1.2m`. **LVR is calculated automatically**, with a hint when LMI is likely.
+- **Finalise:** locks a note as a compliance record, **enforced by the server**. Later corrections are **timestamped, append-only amendments**.
+- **Version history:** preview earlier versions and restore one. Delete is a **soft delete**, so records are retained.
+- **CSV:** export notes (respecting the current filters) and clients. Import clients with column matching, a preview, and duplicates skipped rather than overwritten. Exports are **Excel-safe**, with a formula-injection guard.
+
+**✨ AI assist (free models only)**
+
+- One click returns a **summary**, **action items** (insertable as a checklist), **key figures** (applied in one click) and an **RG 273 Best Interests check**.
+- **Privacy:** TFNs, Medicare, card and bank numbers, phone numbers and emails are **removed on the server before anything is sent**, and the panel shows what was removed.
+- **Free OpenRouter models only:** a paid model id is ignored. Results are cached until the note changes, with **20 analyses per broker per day**.
+- **Drafts only:** results are labelled _AI-generated_, and nothing changes in the note until you click _Insert_ or _Apply_.
 
 ## Architecture
 
 ```
 broker-notes/
 ├─ apps/
-│  ├─ web/   Next.js 15: UI only (Tiptap editor, pages, mobile layout). No database access.
-│  └─ api/   NestJS 11 REST API: auth, notes, clients, CSV, Prisma → Postgres. Swagger at /docs.
+│  ├─ web/      Next.js 15: UI only (Tiptap, pages, mobile). No database access.
+│  └─ api/      NestJS 11 REST API: auth, notes, clients, CSV, AI, Prisma → Postgres. Swagger at /docs.
 └─ packages/
-   └─ shared/  Zod schemas, API types (DTOs) and pure business logic used by both apps.
+   └─ shared/   Zod schemas, API types and pure business logic used by both apps (CJS + ESM builds).
 ```
 
 ```
-Browser ──► Next.js (apps/web) ──/api/* proxy──► NestJS (apps/api) ──► Postgres (Neon)
-              │  server components call the API directly, forwarding the session cookie
-              └─ middleware checks the session JWT (for routing only; the API authorises every request)
+Browser ─► Next.js (apps/web) ─/api/* proxy─► NestJS (apps/api) ─► Postgres (Neon)
+              ├─ server components call the API directly, forwarding the session cookie
+              └─ middleware verifies the session JWT for page routing (the API authorises every request)
 ```
 
-- **Auth:** the API issues a signed JWT in an **httpOnly** cookie (`bn_session`). The browser reaches the API through the web app's same-origin `/api` proxy, so the cookie is first-party and no CORS setup is needed.
-- **One source of truth for validation:** the API validates every request with the **same Zod schemas** the web forms use (`packages/shared`).
-- **Isolation:** every query is scoped to the signed-in broker. Another broker's ids return **404**.
+|              |                                                                                                   |
+| ------------ | ------------------------------------------------------------------------------------------------- |
+| **Frontend** | Next.js 15 (App Router), React 19, Tiptap 3, Tailwind v4, shadcn/ui, light/dark                   |
+| **Backend**  | NestJS 11, Prisma 6, Postgres (Neon), Zod validation, Swagger/OpenAPI, Helmet, rate limiting      |
+| **Auth**     | bcrypt + JWT in an **httpOnly, SameSite=Lax** cookie, through a same-origin proxy (no CORS)       |
+| **AI**       | OpenRouter `:free` models (Nemotron 3.5 Super, Gemma fallbacks), one structured call per analysis |
+| **Shared**   | One set of Zod schemas validates the forms _and_ the API, so the two can never disagree           |
+| **Hosting**  | Vercel (web), Render (API), Neon (DB): see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)               |
 
-## AI assist (free models only)
+## Security and privacy
 
-From any note, **AI assist** runs one structured analysis with a **free OpenRouter model**:
-
-- a compliance-style **summary**
-- **action items**, insertable as a checklist
-- **key loan figures**, applied to the note's details on a click
-- a **Best Interests (ASIC RG 273) check** that flags missing lender comparisons or reasons
-
-Safeguards:
-
-- **Privacy first:** TFNs, Medicare, card and bank numbers, phone numbers and emails are **removed on the server** before anything is sent. The panel shows what was removed.
-- **Free only:** any model id not ending in `:free` is ignored. A payment-required response is refused.
-- **Cost and abuse controls:** one request per analysis, results **cached** until the note changes, **20 analyses per broker per day**, and a per-minute burst limit.
-- **Drafts, not edits:** results are labelled _AI-generated_ and nothing changes in the note until the broker clicks _Insert_ or _Apply_. Analysing doesn't change "last edited".
-- **Tests never call the AI:** CI and E2E use a deterministic mock provider (`AI_PROVIDER=mock`).
+- **Isolation:** every query is scoped to the signed-in broker. Another broker's note or client returns
+  **404**, for every action (integration-tested).
+- **Auth:** bcrypt (cost 12), login timing that doesn't reveal which emails exist, generic error messages,
+  **10 attempts/min per IP**, and redirects restricted to this site.
+- **Compliance:** the finalise lock and soft delete are enforced on the server. Amendments are append-only,
+  and version history is kept.
+- **AI:** identifiers are redacted server-side, models are free-only, and AI output is draft-only, with daily
+  and per-minute limits.
+- **Data hygiene:** inputs are validated with size limits, CSV exports can't trigger formulas, and secrets
+  live only in `.env` files.
+- **CI security:** CodeQL, dependency review and npm audit run on every PR.
 
 ## Getting started
 
@@ -54,34 +121,79 @@ npm install
 cp apps/api/.env.example apps/api/.env   # DATABASE_URL, DIRECT_URL, AUTH_SECRET (+ OPENROUTER_API_KEY for AI)
 cp apps/web/.env.example apps/web/.env   # API_URL, AUTH_SECRET
 
-# 2. Create the database tables
+# 2. Create the tables and the demo account
 npm run db:migrate
+npm run db:seed        # demo@brokernotes.dev / demo1234
 
-# 3. Run shared (watch) + API (:4000) + web (:3000) together
+# 3. Run shared (watch) + API (:4000) + web (:3000)
 npm run dev
 ```
 
-Open http://localhost:3000 for the app and http://localhost:4000/docs for the API docs.
+The app opens at http://localhost:3000 and the API docs at http://localhost:4000/docs.
 
-## Scripts (from the repo root)
-
-| Command                                 | What it does                                                               |
-| --------------------------------------- | -------------------------------------------------------------------------- |
-| `npm run dev`                           | shared + API + web in watch mode                                           |
-| `npm run build`                         | Build shared, then the API, then the web app                               |
-| `npm run check`                         | Lint, typecheck, unit tests and format check across all workspaces         |
-| `npm test`                              | Unit tests: shared (Vitest), web (Vitest), API (Jest)                      |
-| `npm run test:int -w @broker-notes/api` | API integration tests over HTTP against a real Postgres                    |
-| `npm run test:e2e`                      | Playwright end-to-end tests (desktop + mobile); starts the API and web app |
+| Command                                 | What it does                                                       |
+| --------------------------------------- | ------------------------------------------------------------------ |
+| `npm run dev`                           | shared + API + web in watch mode                                   |
+| `npm run build`                         | Build shared, then the API, then the web app                       |
+| `npm run check`                         | Lint, typecheck, unit tests and format check across all workspaces |
+| `npm test`                              | Unit tests: shared (Vitest), web (Vitest), API (Jest)              |
+| `npm run test:int -w @broker-notes/api` | API integration tests over HTTP against a real Postgres            |
+| `npm run test:e2e`                      | Playwright E2E (desktop + mobile); starts the API and the web app  |
+| `npm run db:seed`                       | (Re)create the demo account                                        |
 
 ## Testing
 
-| Layer             | Tooling                     | What it covers                                                                                          |
-| ----------------- | --------------------------- | ------------------------------------------------------------------------------------------------------- |
-| Shared logic      | Vitest                      | Filters, dates (Sydney time zone and daylight saving), money and LVR, CSV safety, templates, lock rules |
-| Web               | Vitest                      | Route guard, session JWT verification, autosave timing, formatting                                      |
-| API (unit)        | Jest                        | Password hashing                                                                                        |
-| API (integration) | Jest + supertest + Postgres | Auth, rate limiting, broker isolation, full note lifecycle, finalise lock, CSV import and export        |
-| End to end        | Playwright                  | Real browser flows on desktop and mobile across both apps                                               |
+| Layer             | Tooling                     | Covers                                                                                                                        |
+| ----------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Shared logic      | Vitest (110+ tests)         | Filters, Sydney dates and daylight saving, money and LVR, CSV safety, templates, lock rules, AI redaction and parsing         |
+| Web               | Vitest                      | Route guard, session JWT verification, ordered request queue, autosave timing                                                 |
+| API (integration) | Jest + supertest + Postgres | Auth and rate limits, **broker isolation**, the full note lifecycle, the finalise lock, CSV, and AI (redaction, cache, quota) |
+| End to end        | Playwright                  | Real browser flows on **desktop and mobile** across both apps, including AI (mock provider)                                   |
 
-CI (GitHub Actions) runs all of these on every pull request, plus CodeQL, dependency review and npm audit.
+**CI** (GitHub Actions) runs lint, format, typecheck, unit tests, a **database migration and drift check**,
+**API integration tests on Postgres 17**, the build, **E2E**, CodeQL, dependency review and npm audit. A single
+**✅ CI passed** check is required before anything merges into `main`.
+
+## How AI was used to build this
+
+The assignment asked for AI-assisted development. This project was built with **Claude Code** as a pair
+programmer, and the human (me) owned direction and review:
+
+1. **Research.** Parallel AI research agents studied broker workflows and Australian compliance (RG 273),
+   plus the hiring context. The findings set the product direction above.
+2. **Plan.** The AI drafted a phased plan with "done when" criteria. I adjusted scope: OpenRouter with free
+   models only, mobile-first, CSV, a PR per phase, and later **a separate NestJS backend**.
+3. **Build, one PR per phase.** Each phase was a branch with small conventional commits and a detailed PR
+   (summary, screenshots, how to test, checklist). **I reviewed and merged every PR myself.**
+4. **Verify.** The AI wrote unit, integration and E2E tests alongside the code and reviewed real screenshots.
+   That process caught real bugs before review, including:
+   - formatted notes failing to save (ProseMirror attributes the serializer couldn't send)
+   - autosave never firing during continuous typing
+   - version history losing intermediate wording
+   - a **request-ordering race** after the backend split (two quick edits landing out of order)
+   - a Zod bundle leak that added about 100 kB to every page
+   - a CodeQL prototype-pollution finding
+   - a reasoning model returning empty replies under too small a token budget
+
+The full decision log and a prompt-by-prompt **AI usage log** are in [`SCRATCHPAD.md`](SCRATCHPAD.md).
+Every phase's PR is in the [closed pull requests](https://github.com/Grohit22013/broker-notes/pulls?q=is%3Apr+is%3Aclosed+Phase).
+
+## Key design decisions
+
+| Decision                                                   | Why                                                                                         |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Separate **NestJS API** + Next.js UI in a **monorepo**     | Clear frontend/backend boundary, with shared schemas and types so the two can't drift apart |
+| **Australian** focus, built around RG 273                  | Matches the hiring context, and gives the notes a compliance purpose beyond plain text      |
+| Tiptap JSON **plus** a plain-text copy                     | JSON keeps formatting exact; the text copy powers search, snippets and AI                   |
+| Finalise lock + amendments, soft delete                    | A compliance record must never be silently rewritten or removed                             |
+| Follow-ups as **Sydney calendar days**                     | "Due today" must match the broker's day, not the server's UTC day                           |
+| **One** structured AI call, cached, free models, redaction | Lowest cost and risk; no multi-step agent for a single-note task                            |
+| **Ordered** browser mutations                              | `fetch` runs in parallel; edits must land in the order they were made                       |
+| Mobile-first, accessible                                   | Brokers write notes between meetings; every control has an accessible name and 44px targets |
+
+## Limitations and next steps
+
+- No "forgot password" or email verification (no email provider). Single-broker accounts only, with no teams or processor roles yet.
+- Render's free plan sleeps when idle; the keep-warm workflow helps during business hours.
+- Free AI models can be rate-limited upstream. The app falls back across free models and explains when it's busy.
+- Possible next steps: an "Ask my notes" agent, AI follow-up email drafts, and a broker/processor role for offshore processing teams.
