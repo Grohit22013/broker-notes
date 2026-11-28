@@ -52,6 +52,15 @@ the assignment. The findings shaped the product:
 - **Autosave you can trust:** saves after a short pause, **at least every 5 seconds while typing**, and **when the app is backgrounded on a phone**. Ctrl+S saves straight away, a failed save offers retry, and the browser warns before you leave with unsaved changes.
 - **Mobile-first:** the toolbar sticks to the top and scrolls sideways, with 44px touch targets.
 
+**📅 Calendar and quick set-up (Phase 12)**
+
+- **Calendar** beside the dashboard (below it on phones): a month view of **meetings**, **follow-ups** and **task due dates**. Choose a day to see what's on, and each item links to its note or task.
+- **Meeting date & time** on notes (Sydney time, locked once finalised). _Client meeting_ notes start at "now".
+- **+ Add client…** straight from the New note page: the client is created and selected without leaving the page.
+- **AI spots dates in notes:** "call back next Tuesday" or "valuation due Friday" are resolved against today's date and offered as **Set as meeting time**, **Set as follow-up** or **Create task**. Nothing changes until you click.
+
+<img src="docs/screenshots/dashboard-calendar-desktop.png" width="640" alt="Dashboard with calendar">
+
 **🛡️ Never lose work (Phase 11)**
 
 - **Edit-conflict protection:** every save carries the revision it was based on. If the note changed in another tab or by a colleague, the save is refused instead of silently overwriting, and you choose **Load their version** or **Keep mine** (the other version stays in history).
@@ -104,7 +113,7 @@ the assignment. The findings shaped the product:
 
 **✨ AI assist (free models only)**
 
-- One click returns a **summary**, **action items** (insertable as a checklist), **key figures** (applied in one click) and an **RG 273 Best Interests check**.
+- One click returns a **summary**, **action items** (insertable as a checklist, or as tasks), **key figures** (applied in one click), an **RG 273 Best Interests check**, and the **dates** the note mentions (as meetings, follow-ups or tasks).
 - **Privacy:** TFNs, Medicare, card and bank numbers, phone numbers and emails are **removed on the server before anything is sent**, and the panel shows what was removed.
 - **Free OpenRouter models only:** a paid model id is ignored. Results are cached until the note changes, with **20 analyses per broker per day**.
 - **Drafts only:** results are labelled _AI-generated_, and nothing changes in the note until you click _Insert_ or _Apply_.
