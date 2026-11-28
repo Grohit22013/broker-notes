@@ -1,0 +1,22 @@
+# Render's free plan sleeps the API after 15 min idle (first request then takes ~50s).
+# This pings /health during Australian business hours so the demo stays responsive.
+# Set the repository variable API_HEALTH_URL (Settings → Variables) to enable it.
+name: Keep API warm
+
+on:
+  schedule:
+    - cron: "*/14 20-23,0-9 * * *" # ~07:00–20:00 AEDT
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  ping:
+    name: 🔥 Ping API health
+    if: vars.API_HEALTH_URL != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - run: curl -fsS --max-time 90 "$URL" && echo
+        env:
+          URL: ${{ vars.API_HEALTH_URL }}

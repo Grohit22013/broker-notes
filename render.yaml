@@ -1,0 +1,33 @@
+# Render Blueprint — BrokerNotes API (NestJS). https://render.com/docs/blueprint-spec
+# Deploy: Render dashboard → New → Blueprint → pick this repo. Secrets marked sync:false are
+# entered in the dashboard (never committed).
+services:
+  - type: web
+    name: brokernotes-api
+    runtime: node
+    plan: free
+    region: singapore # next to the Neon database (ap-southeast-1) and Australian users
+    branch: main
+    autoDeploy: true
+    buildCommand: npm ci --include=dev && npm run build:shared && npm run build -w @broker-notes/api
+    # Apply pending migrations, then start. (Pre-deploy hooks aren't available on the free plan.)
+    startCommand: npm run db:deploy -w @broker-notes/api && npm run start -w @broker-notes/api
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 20.19.0
+      - key: NODE_ENV
+        value: production
+      # Render load balancer + Vercel's /api rewrite sit in front of the API.
+      - key: TRUST_PROXY
+        value: "2"
+      - key: DATABASE_URL # Neon pooled connection string
+        sync: false
+      - key: DIRECT_URL # Neon direct connection string (migrations)
+        sync: false
+      - key: AUTH_SECRET # must equal the web app's AUTH_SECRET
+        sync: false
+      - key: WEB_ORIGIN # e.g. https://brokernotes.vercel.app
+        sync: false
+      - key: OPENROUTER_API_KEY # optional; AI assist is disabled without it (free models only)
+        sync: false

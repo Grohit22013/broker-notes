@@ -11,6 +11,11 @@ const envSchema = z.object({
   WEB_ORIGIN: z.string().default("http://localhost:3000"),
   /** Max login/register attempts per IP per minute (brute-force protection). Raise only for tests. */
   AUTH_RATE_LIMIT: z.coerce.number().int().positive().default(10),
+  /**
+   * Number of proxy hops in front of the API (Render's load balancer, plus Vercel's /api rewrite).
+   * Lets rate limiting see the real client IP instead of the proxy's. 0 = direct (local dev).
+   */
+  TRUST_PROXY: z.coerce.number().int().min(0).max(5).default(0),
   /** Secure cookies require HTTPS; defaults on in production. */
   COOKIE_SECURE: z
     .enum(["true", "false"])
