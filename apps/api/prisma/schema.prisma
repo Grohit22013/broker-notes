@@ -177,6 +177,8 @@ model Note {
   tags           String[]      @default([])
   /// When the broker needs to follow up (call back, chase documents, review).
   followUpAt     DateTime?
+  /// When the meeting this note records took place (an instant; shown in Australia/Sydney time).
+  meetingAt      DateTime?
   pinned         Boolean       @default(false)
   /// The mortgage case this note belongs to (its client is then the case's client).
   caseId         String?
@@ -206,6 +208,7 @@ model Note {
 
   @@index([organisationId, deletedAt, updatedAt(sort: Desc)])
   @@index([organisationId, followUpAt])
+  @@index([organisationId, meetingAt])
   @@index([userId])
   @@index([clientId])
   @@index([caseId])
