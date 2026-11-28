@@ -1,16 +1,15 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { Briefcase, Plus, Search, SearchX } from "lucide-react";
 
 import { CaseCard } from "@/components/cases/case-card";
 import { CaseFormDialog } from "@/components/cases/case-form-dialog";
 import { EmptyState } from "@/components/shared/empty-state";
+import { FilterChip } from "@/components/shared/filter-chip";
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { requireUser } from "@/lib/auth/session";
 import { activeMembers, clientOptions, listCases } from "@/lib/api/queries";
-import { cn } from "@/lib/utils";
 import { CASE_STAGES } from "@broker-notes/shared/cases/taxonomy";
 import { caseFiltersSchema } from "@broker-notes/shared/cases/validation";
 import { canManageCases } from "@broker-notes/shared/orgs/roles";
@@ -51,17 +50,9 @@ export default async function CasesPage({ searchParams }: Props) {
   };
 
   const chip = (label: string, to: string, active: boolean) => (
-    <Link
-      key={label}
-      href={to}
-      aria-current={active ? "page" : undefined}
-      className={cn(
-        "inline-flex h-9 shrink-0 items-center rounded-full border px-3 text-sm font-medium transition-colors",
-        active ? "bg-primary text-primary-foreground border-primary" : "hover:bg-accent",
-      )}
-    >
+    <FilterChip key={label} href={to} active={active}>
       {label}
-    </Link>
+    </FilterChip>
   );
 
   const newCase = canManage ? (
@@ -134,7 +125,9 @@ export default async function CasesPage({ searchParams }: Props) {
             description="Try another search or filter."
             action={
               <Button asChild variant="outline">
-                <Link href="/cases">Clear filters</Link>
+                {/* Plain link on purpose: same-page navigations can stall (see FilterChip). */}
+                {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+                <a href="/cases">Clear filters</a>
               </Button>
             }
           />

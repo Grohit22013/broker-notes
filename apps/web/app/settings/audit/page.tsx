@@ -4,11 +4,11 @@ import { ShieldAlert } from "lucide-react";
 
 import { AuditList } from "@/components/team/audit-list";
 import { EmptyState } from "@/components/shared/empty-state";
+import { FilterChip } from "@/components/shared/filter-chip";
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/session";
 import { getAuditPage } from "@/lib/api/queries";
-import { cn } from "@/lib/utils";
 import { AUDIT_CATEGORIES, AUDIT_CATEGORY_VALUES } from "@broker-notes/shared/orgs/audit";
 import { canManageTeam } from "@broker-notes/shared/orgs/roles";
 
@@ -42,17 +42,9 @@ export default async function AuditPage({ searchParams }: Props) {
   const page = await getAuditPage(category);
 
   const chip = (href: string, label: string, active: boolean) => (
-    <Link
-      key={href}
-      href={href}
-      aria-current={active ? "page" : undefined}
-      className={cn(
-        "inline-flex h-9 shrink-0 items-center rounded-full border px-3 text-sm font-medium transition-colors",
-        active ? "bg-primary text-primary-foreground border-primary" : "hover:bg-accent",
-      )}
-    >
+    <FilterChip key={label} href={href} active={active}>
       {label}
-    </Link>
+    </FilterChip>
   );
 
   return (
