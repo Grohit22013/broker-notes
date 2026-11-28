@@ -6,6 +6,7 @@ import type {
   CaseListItemDto,
   CaseOptionDto,
   DashboardDto,
+  OrgTemplateDto,
   TaskDto,
   ClientDetailDto,
   ClientListItemDto,
@@ -48,6 +49,9 @@ export const existingClientEmails = () => apiGet<string[]>("/clients/emails");
 export const getOrganisation = () => apiGet<OrganisationDto>("/organisation");
 
 export const getDashboard = () => apiGet<DashboardDto>("/dashboard");
+
+/** The brokerage's own note templates. */
+export const orgTemplates = () => apiGet<OrgTemplateDto[]>("/templates");
 
 /** Tasks, filtered like the /tasks page URL (status, assignee, due, note, client, case, q). */
 export function listTasks(params: Record<string, string | undefined> = {}) {

@@ -19,6 +19,7 @@ export function toNoteCardData(n: NoteListItemDto, viewer: Actor): NoteCardData 
     finalised: n.status === "FINALISED",
     clientName: n.client?.name ?? null,
     caseReference: n.case?.reference ?? null,
+    favourite: n.favourite,
     loanAmount: n.keyFigures.loanAmount ?? null,
     lvr: lvrOf(n.keyFigures),
     authorName: n.author.id === viewer.id ? null : n.author.name,

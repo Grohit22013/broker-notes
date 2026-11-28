@@ -10,7 +10,7 @@ import type { ApiErrorBody } from "@broker-notes/shared/dto";
 import type { Response } from "express";
 
 /**
- * Every error leaves the API as `{ statusCode, message, field? }`.
+ * Every error leaves the API as `{ statusCode, message, field?, code?, latest? }`.
  * Unexpected errors are logged server-side and returned as a generic 500 (no stack traces).
  */
 @Catch()
@@ -25,11 +25,15 @@ export class HttpExceptionFilter implements ExceptionFilter {
       const raw = exception.getResponse();
       const body: ApiErrorBody = { statusCode: status, message: exception.message };
       if (typeof raw === "object" && raw !== null) {
-        const r = raw as { message?: unknown; field?: unknown };
+        const r = raw as { message?: unknown; field?: unknown; code?: unknown; latest?: unknown };
         if (typeof r.message === "string") body.message = r.message;
         else if (Array.isArray(r.message) && typeof r.message[0] === "string")
           body.message = r.message[0];
         if (typeof r.field === "string") body.field = r.field;
+        if (typeof r.code === "string") body.code = r.code;
+        if (typeof r.latest === "object" && r.latest !== null) {
+          body.latest = r.latest as ApiErrorBody["latest"];
+        }
       }
       res.status(status).json(body);
       return;

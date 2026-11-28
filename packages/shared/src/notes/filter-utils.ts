@@ -18,6 +18,10 @@ export type NoteFilters = {
   due: boolean;
   /** Only notes written by the signed-in member ("Created by me"). */
   mine: boolean;
+  /** Only the signed-in member's starred notes. */
+  favourite: boolean;
+  /** Only notes still in draft (not finalised). */
+  drafts: boolean;
   sort: SortValue;
 };
 
@@ -35,15 +39,25 @@ export function filtersToSearchParams(filters: Partial<NoteFilters>): URLSearchP
   if (filters.case) p.set("case", filters.case);
   if (filters.due) p.set("due", "1");
   if (filters.mine) p.set("mine", "1");
+  if (filters.favourite) p.set("fav", "1");
+  if (filters.drafts) p.set("drafts", "1");
   if (filters.sort && filters.sort !== DEFAULT_SORT) p.set("sort", filters.sort);
   return p;
 }
 
 /** Number of active filters (search and sort excluded) — shown on the mobile "Filters" button. */
 export function activeFilterCount(f: NoteFilters): number {
-  return [f.stage, f.type, f.tag, f.client, f.case, f.due || undefined, f.mine || undefined].filter(
-    Boolean,
-  ).length;
+  return [
+    f.stage,
+    f.type,
+    f.tag,
+    f.client,
+    f.case,
+    f.due || undefined,
+    f.mine || undefined,
+    f.favourite || undefined,
+    f.drafts || undefined,
+  ].filter(Boolean).length;
 }
 
 export function hasAnyFilter(f: NoteFilters): boolean {

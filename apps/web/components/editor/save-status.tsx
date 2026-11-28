@@ -11,6 +11,7 @@ const LABELS: Record<SaveStatus, string> = {
   saving: "Saving…",
   saved: "Saved",
   error: "Not saved",
+  conflict: "Not saved: changed elsewhere",
 };
 
 export function SaveStatusIndicator({
@@ -28,7 +29,7 @@ export function SaveStatusIndicator({
       aria-live="polite"
       className={cn(
         "flex items-center gap-1.5 text-xs whitespace-nowrap",
-        status === "error" ? "text-destructive" : "text-muted-foreground",
+        status === "error" || status === "conflict" ? "text-destructive" : "text-muted-foreground",
       )}
     >
       {status === "saving" ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : null}
@@ -36,7 +37,9 @@ export function SaveStatusIndicator({
       {status === "pending" ? (
         <span className="bg-muted-foreground size-1.5 rounded-full" aria-hidden />
       ) : null}
-      {status === "error" ? <AlertCircle className="size-3.5" aria-hidden /> : null}
+      {status === "error" || status === "conflict" ? (
+        <AlertCircle className="size-3.5" aria-hidden />
+      ) : null}
       <span>{status === "error" && error ? error : LABELS[status]}</span>
       {status === "error" ? (
         <button

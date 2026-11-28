@@ -28,6 +28,10 @@ const filtersSchema = z.object({
   case: z.preprocess(first, z.cuid().optional().catch(undefined)),
   due: z.preprocess(first, z.literal("1").optional().catch(undefined)).transform((v) => v === "1"),
   mine: z.preprocess(first, z.literal("1").optional().catch(undefined)).transform((v) => v === "1"),
+  fav: z.preprocess(first, z.literal("1").optional().catch(undefined)).transform((v) => v === "1"),
+  drafts: z
+    .preprocess(first, z.literal("1").optional().catch(undefined))
+    .transform((v) => v === "1"),
   sort: z.preprocess(
     first,
     z.enum(["updated", "created", "followup", "title"]).catch(DEFAULT_SORT).default(DEFAULT_SORT),
@@ -47,6 +51,8 @@ export function parseNoteFilters(
     case: parsed.case,
     due: parsed.due,
     mine: parsed.mine,
+    favourite: parsed.fav,
+    drafts: parsed.drafts,
     sort: parsed.sort,
   };
 }
@@ -78,6 +84,8 @@ export function buildNoteWhere(scope: NoteScope, f: NoteFilters, now: Date = new
   if (f.due) and.push({ followUpAt: { lt: startOfNextZonedDay(now) } });
 
   if (f.mine) and.push({ userId: scope.userId });
+  if (f.favourite) and.push({ favourites: { some: { userId: scope.userId } } });
+  if (f.drafts) and.push({ status: "DRAFT" as const });
 
   return {
     organisationId: scope.organisationId,

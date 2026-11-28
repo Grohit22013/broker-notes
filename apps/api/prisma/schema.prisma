@@ -27,6 +27,7 @@ model Organisation {
   notes     Note[]
   cases     MortgageCase[]
   tasks     Task[]
+  templates OrgTemplate[]
   invites   Invite[]
   auditLogs AuditLog[]
 }
@@ -55,13 +56,15 @@ model User {
   updatedAt      DateTime     @updatedAt
 
   notes           Note[]
-  clients         Client[]       @relation("ClientCreatedBy")
-  assignedClients Client[]       @relation("ClientAdviser")
-  casesCreated    MortgageCase[] @relation("CaseCreatedBy")
-  assignedCases   MortgageCase[] @relation("CaseAdviser")
-  tasksCreated    Task[]         @relation("TaskCreatedBy")
-  assignedTasks   Task[]         @relation("TaskAssignee")
-  tasksCompleted  Task[]         @relation("TaskCompletedBy")
+  clients         Client[]        @relation("ClientCreatedBy")
+  assignedClients Client[]        @relation("ClientAdviser")
+  casesCreated    MortgageCase[]  @relation("CaseCreatedBy")
+  assignedCases   MortgageCase[]  @relation("CaseAdviser")
+  tasksCreated    Task[]          @relation("TaskCreatedBy")
+  assignedTasks   Task[]          @relation("TaskAssignee")
+  tasksCompleted  Task[]          @relation("TaskCompletedBy")
+  favourites      NoteFavourite[]
+  templates       OrgTemplate[]
   aiUsages        AiUsage[]
   invitesSent     Invite[]
   auditLogs       AuditLog[]
@@ -163,6 +166,9 @@ model Note {
   contentJson    Json
   /// Plain-text projection of contentJson (search + list snippets).
   contentText    String        @default("")
+  /// Increases with every content save. Saves carry the revision they were based on, so edits
+  /// made elsewhere in the meantime are never silently overwritten (optimistic concurrency).
+  revision       Int           @default(1)
   /// What kind of file note this is (drives templates and filtering).
   noteType       NoteType      @default(GENERAL)
   /// Where the client's loan is in the pipeline when this note was written (optional).
@@ -196,6 +202,7 @@ model Note {
   versions   NoteVersion[]
   amendments NoteAmendment[]
   tasks      Task[]
+  favourites NoteFavourite[]
 
   @@index([organisationId, deletedAt, updatedAt(sort: Desc)])
   @@index([organisationId, followUpAt])
@@ -355,4 +362,36 @@ model Task {
   @@index([noteId])
   @@index([clientId])
   @@index([caseId])
+}
+
+/// A member's starred note (personal; other members don't see it).
+model NoteFavourite {
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  noteId    String
+  note      Note     @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([userId, noteId])
+  @@index([noteId])
+}
+
+/// A brokerage's own note template, saved from an existing note's structure.
+model OrgTemplate {
+  id             String       @id @default(cuid())
+  organisationId String
+  organisation   Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  name           String
+  description    String?
+  noteType       NoteType
+  /// Default title; "{client}" is replaced with the client's name.
+  title          String
+  contentJson    Json
+  createdById    String
+  createdBy      User         @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+  /// Removed templates are kept (notes made from them stay explainable) but no longer offered.
+  archivedAt     DateTime?
+
+  @@index([organisationId, archivedAt])
 }

@@ -19,6 +19,8 @@ describe("parseNoteFilters", () => {
       client: undefined,
       due: false,
       mine: false,
+      favourite: false,
+      drafts: false,
       sort: "updated",
     });
   });
@@ -40,6 +42,8 @@ describe("parseNoteFilters", () => {
       client: undefined,
       due: true,
       mine: false,
+      favourite: false,
+      drafts: false,
       sort: "followup",
     });
   });

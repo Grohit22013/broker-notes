@@ -16,6 +16,7 @@ import {
   TypeBadge,
 } from "@/components/notes/badges";
 import { DeleteNoteDialog } from "@/components/notes/delete-note-dialog";
+import { FavouriteButton } from "@/components/notes/favourite-button";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -44,6 +45,8 @@ export type NoteCardData = {
   finalised: boolean;
   clientName: string | null;
   caseReference: string | null;
+  /** Starred by the viewer. */
+  favourite: boolean;
   loanAmount: number | null;
   lvr: number | null;
   /** Shown when someone else wrote the note (null for the viewer's own notes). */
@@ -94,7 +97,7 @@ export function NoteCard({
       {/* The whole card is a link; the menu button sits above it. */}
       <Link
         href={`/notes/${note.id}`}
-        className="flex flex-1 flex-col rounded-xl p-4 pr-12 outline-none md:p-5 md:pr-12"
+        className="flex flex-1 flex-col rounded-xl p-4 pr-24 outline-none md:p-5 md:pr-24"
         aria-label={`Open note: ${shownTitle}`}
       >
         <div className="flex items-center gap-1.5">
@@ -163,8 +166,9 @@ export function NoteCard({
         </p>
       </Link>
 
-      {note.canEdit ? (
-        <div className="absolute top-2 right-2">
+      <div className="absolute top-2 right-2 flex items-center">
+        <FavouriteButton noteId={note.id} initial={note.favourite} noteTitle={shownTitle} />
+        {note.canEdit ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -194,8 +198,8 @@ export function NoteCard({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
 
       <DeleteNoteDialog
         noteId={note.id}

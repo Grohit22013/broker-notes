@@ -52,6 +52,15 @@ the assignment. The findings shaped the product:
 - **Autosave you can trust:** saves after a short pause, **at least every 5 seconds while typing**, and **when the app is backgrounded on a phone**. Ctrl+S saves straight away, a failed save offers retry, and the browser warns before you leave with unsaved changes.
 - **Mobile-first:** the toolbar sticks to the top and scrolls sideways, with 44px touch targets.
 
+**🛡️ Never lose work (Phase 11)**
+
+- **Edit-conflict protection:** every save carries the revision it was based on. If the note changed in another tab or by a colleague, the save is refused instead of silently overwriting, and you choose **Load their version** or **Keep mine** (the other version stays in history).
+- **Draft recovery:** unsaved edits are mirrored in the browser. After a crash, a closed tab or a dropped connection, reopening the note offers **Restore my changes**.
+- **Slash commands:** type `/` for headings, checklists, tables, quotes and dividers.
+- **Favourites and Drafts** filters, plus **brokerage templates**: admins and advisers can save any note's structure as a template for the whole brokerage. Also new built-in **Lender update** and **Client meeting** templates.
+
+<img src="docs/screenshots/edit-conflict-desktop.png" width="640" alt="Edit conflict banner">
+
 **🗂️ Notes list**
 
 - **Search** across title, body and client name, with highlighted matches.
@@ -234,4 +243,4 @@ Every phase's PR is in the [closed pull requests](https://github.com/Grohit22013
 - Render's free plan sleeps when idle; the keep-warm workflow helps during business hours.
 - Free AI models can be rate-limited upstream. The app falls back across free models and explains when it's busy.
 - Filter chips on server-rendered list pages use plain links (a full page load), because in production builds Next.js 15.5 sometimes never applies a client navigation that only changes the query string. See SCRATCHPAD "Open issues".
-- Coming next (from the product research): editor extras such as edit-conflict detection and draft recovery (Phase 11).
+- Coming next: going live (Phase 12). Real-time co-editing isn't included: conflicts are detected and resolved, not merged live.

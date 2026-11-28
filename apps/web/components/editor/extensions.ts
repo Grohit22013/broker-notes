@@ -5,10 +5,12 @@ import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { Highlight } from "@tiptap/extension-highlight";
 import { TableKit } from "@tiptap/extension-table";
 
+import { SlashCommand } from "./slash-command";
+
 /**
  * Editor feature set for broker file notes:
  * headings for structure, lists + checklists for conditions / document requests,
- * highlight for key figures, tables for lender comparisons, and safe links.
+ * highlight for key figures, tables for lender comparisons, safe links, and a "/" command menu.
  */
 export function buildExtensions({ placeholder }: { placeholder: string }): Extensions {
   return [
@@ -31,5 +33,6 @@ export function buildExtensions({ placeholder }: { placeholder: string }): Exten
     Highlight.configure({ multicolor: false }),
     TableKit.configure({ table: { resizable: false } }),
     CharacterCount,
+    SlashCommand,
   ];
 }

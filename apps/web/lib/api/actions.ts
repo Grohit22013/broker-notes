@@ -11,6 +11,7 @@ import type {
   CreatedNoteDto,
   ImportProblemDto,
   NoteAnalysisDto,
+  NoteConflictDto,
   NoteMetaDto,
   SavedNoteDto,
   VersionDetailDto,
@@ -28,17 +29,24 @@ type Fail = { ok: false; error: string };
 
 // ── Notes ────────────────────────────────────────────────────────────────────
 
-export type SaveNoteResult = { ok: true; updatedAt: string } | Fail;
+export type SaveNoteResult =
+  | { ok: true; updatedAt: string; revision: number }
+  /** The note changed elsewhere since `baseRevision`: nothing was saved. */
+  | { ok: false; error: string; conflict?: NoteConflictDto };
 
 export async function saveNoteAction(input: {
   id: string;
   title: string;
   contentJson: DocJson;
   contentText: string;
+  baseRevision?: number;
 }): Promise<SaveNoteResult> {
   const { id, ...body } = input;
   const res = await api<SavedNoteDto>("PUT", `/notes/${id}/content`, body);
-  return res.ok ? { ok: true, updatedAt: res.data.updatedAt } : { ok: false, error: res.error };
+  if (res.ok) return { ok: true, updatedAt: res.data.updatedAt, revision: res.data.revision };
+  return res.code === "NOTE_CONFLICT" && res.latest
+    ? { ok: false, error: res.error, conflict: res.latest }
+    : { ok: false, error: res.error };
 }
 
 export type UpdateNoteMetaInput = {

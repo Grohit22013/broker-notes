@@ -59,6 +59,9 @@ export default async function NotePage({ params }: Props) {
         title={note.title}
         displayTitle={displayTitle(note.title)}
         contentJson={note.contentJson}
+        revision={note.revision}
+        favourite={note.favourite}
+        canSaveTemplate={canManageClients(user)}
         createdAt={note.createdAt}
         author={note.author.id === user.id ? null : note.author.name}
         canEdit={canEdit}
