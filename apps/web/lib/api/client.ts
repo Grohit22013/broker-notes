@@ -3,16 +3,28 @@ import type { ApiErrorBody } from "@broker-notes/shared/dto";
 export type ApiResult<T> =
   { ok: true; data: T } | { ok: false; error: string; field?: string; status: number };
 
+type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+
+/**
+ * Mutations run strictly one after another (like Next.js Server Actions did), so a later edit can
+ * never overtake an earlier one — e.g. two quick changes to a key figure, or the last autosave vs.
+ * "Finalise". Reads still run in parallel.
+ */
+let mutationQueue: Promise<unknown> = Promise.resolve();
+
 /**
  * Browser → API call through the same-origin `/api` proxy (next.config rewrites), so the
  * httpOnly session cookie travels automatically and there's no CORS to configure.
  * Never throws: network problems come back as `{ ok: false }` for the UI to show.
  */
-export async function api<T>(
-  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
-  path: string,
-  body?: unknown,
-): Promise<ApiResult<T>> {
+export function api<T>(method: Method, path: string, body?: unknown): Promise<ApiResult<T>> {
+  if (method === "GET") return request<T>(method, path, body);
+  const run = mutationQueue.then(() => request<T>(method, path, body));
+  mutationQueue = run.catch(() => undefined);
+  return run;
+}
+
+async function request<T>(method: Method, path: string, body?: unknown): Promise<ApiResult<T>> {
   let res: Response;
   try {
     res = await fetch(`/api${path}`, {

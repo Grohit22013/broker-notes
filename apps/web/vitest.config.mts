@@ -16,8 +16,12 @@ export default defineConfig({
       include: ["lib/**/*.ts"],
       exclude: [
         "**/*.test.ts",
-        // Thin fetch wrappers around the API — exercised end-to-end by the Playwright suite.
-        "lib/api/**",
+        // Thin typed wrappers around the API — exercised end to end by the Playwright suite.
+        // (lib/api/client.ts — the request queue and error mapping — is unit-tested.)
+        "lib/api/server.ts",
+        "lib/api/queries.ts",
+        "lib/api/actions.ts",
+        "lib/api/auth-actions.ts",
         // Reads cookies via next/headers (server runtime only); its logic lives in jwt.ts (tested).
         "lib/auth/session.ts",
         // Maps an API DTO to card props; covered by E2E.

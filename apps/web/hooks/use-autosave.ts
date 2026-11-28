@@ -89,8 +89,18 @@ export function useAutosave<T>({
   );
 
   /** Save any queued value immediately (Ctrl+S, retry, tab hidden). */
-  const flush = useCallback(() => {
+  /**
+   * Saves any queued value now and resolves once nothing is pending or in flight.
+   * Callers that must see the saved text (finalise, AI analysis) await this: plain fetch
+   * requests run in parallel, so without it a follow-up request could overtake the last save.
+   */
+  const flush = useCallback(async () => {
     void run();
+    const deadline = Date.now() + 15_000;
+    while ((inFlight.current || pendingValue.current) && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 50));
+      if (!inFlight.current && pendingValue.current) void run();
+    }
   }, [run]);
 
   useEffect(() => {
