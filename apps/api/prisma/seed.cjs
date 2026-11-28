@@ -227,7 +227,9 @@ async function main() {
     }
   }
 
-  console.log(`Seeded ${EMAIL} (password: ${PASSWORD}) — 4 clients, ${notes.length} notes.`);
+  // Never print the password itself (it may be a real secret from SEED_PASSWORD).
+  const source = process.env.SEED_PASSWORD ? "SEED_PASSWORD" : "the documented demo default";
+  console.log(`Seeded ${EMAIL} (password from ${source}) — 4 clients, ${notes.length} notes.`);
 }
 
 main()
