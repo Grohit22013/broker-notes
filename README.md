@@ -26,6 +26,23 @@ Browser ──► Next.js (apps/web) ──/api/* proxy──► NestJS (apps/ap
 - **One source of truth for validation:** the API validates every request with the **same Zod schemas** the web forms use (`packages/shared`).
 - **Isolation:** every query is scoped to the signed-in broker. Another broker's ids return **404**.
 
+## AI assist (free models only)
+
+From any note, **AI assist** runs one structured analysis with a **free OpenRouter model**:
+
+- a compliance-style **summary**
+- **action items**, insertable as a checklist
+- **key loan figures**, applied to the note's details on a click
+- a **Best Interests (ASIC RG 273) check** that flags missing lender comparisons or reasons
+
+Safeguards:
+
+- **Privacy first:** TFNs, Medicare, card and bank numbers, phone numbers and emails are **removed on the server** before anything is sent. The panel shows what was removed.
+- **Free only:** any model id not ending in `:free` is ignored. A payment-required response is refused.
+- **Cost and abuse controls:** one request per analysis, results **cached** until the note changes, **20 analyses per broker per day**, and a per-minute burst limit.
+- **Drafts, not edits:** results are labelled _AI-generated_ and nothing changes in the note until the broker clicks _Insert_ or _Apply_. Analysing doesn't change "last edited".
+- **Tests never call the AI:** CI and E2E use a deterministic mock provider (`AI_PROVIDER=mock`).
+
 ## Getting started
 
 Requirements: Node 20.9+ and a Postgres database (for example a free [Neon](https://neon.tech) project).
@@ -34,7 +51,7 @@ Requirements: Node 20.9+ and a Postgres database (for example a free [Neon](http
 npm install
 
 # 1. Configure both apps (AUTH_SECRET must be the same value in both)
-cp apps/api/.env.example apps/api/.env   # DATABASE_URL, DIRECT_URL, AUTH_SECRET
+cp apps/api/.env.example apps/api/.env   # DATABASE_URL, DIRECT_URL, AUTH_SECRET (+ OPENROUTER_API_KEY for AI)
 cp apps/web/.env.example apps/web/.env   # API_URL, AUTH_SECRET
 
 # 2. Create the database tables
