@@ -10,6 +10,10 @@ AI assistance runs on free models only.
 > Demo logins (password `demo1234`), one per role in the demo brokerage _Harbour Home Loans_:
 > `demo@brokernotes.dev` (Admin) · `adviser@brokernotes.dev` (Adviser) · `casemanager@brokernotes.dev` (Case manager)
 
+| Dashboard                                                      | Mortgage case                                                    | Case on a phone                                                 |
+| -------------------------------------------------------------- | ---------------------------------------------------------------- | --------------------------------------------------------------- |
+| <img src="docs/screenshots/dashboard-desktop.png" width="300"> | <img src="docs/screenshots/case-detail-desktop.png" width="300"> | <img src="docs/screenshots/case-detail-mobile.png" width="150"> |
+
 | Notes list                                                      | Tiptap editor                                               | AI assist                                                     |
 | --------------------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------- |
 | <img src="docs/screenshots/notes-list-desktop.png" width="300"> | <img src="docs/screenshots/editor-desktop.png" width="300"> | <img src="docs/screenshots/ai-panel-desktop.png" width="300"> |
@@ -63,6 +67,13 @@ the assignment. The findings shaped the product:
 - **Finalise:** locks a note as a compliance record, **enforced by the server**. Later corrections are **timestamped, append-only amendments**.
 - **Version history:** preview earlier versions and restore one. Delete is a **soft delete**, so records are retained.
 - **CSV:** export notes (respecting the current filters) and clients. Import clients with column matching, a preview, and duplicates skipped rather than overwritten. Exports are **Excel-safe**, with a formula-injection guard.
+
+**🏠 Dashboard and mortgage cases**
+
+- **Dashboard** (the landing page): follow-ups due, open cases (and yours), pinned and recently edited notes, recent clients, the **case pipeline** by stage, quick search and quick-create.
+- **Mortgage cases:** one loan for one client, with an automatic reference (`HL-2026-0007`), loan type, lender and lender reference, amounts with **LVR**, and an assigned adviser.
+- **Nine-stage pipeline** (from the product research, in Australian terms): Enquiry → Fact find → Research → Recommendation → Lodged → Assessment → Approved → Settled → Closed. One click moves a case, and every move is audited. **Case managers can move stages** (tracking progress is their job), but only admins and advisers open cases or change their details.
+- **Notes belong to cases:** write a note from a case, or link one in the details panel. Linking also sets the client. Each case page is a **timeline of its notes**, notes can be searched by case reference, and the notes CSV includes the case.
 
 **👥 Brokerages, roles and audit log**
 
@@ -155,12 +166,12 @@ The app opens at http://localhost:3000 and the API docs at http://localhost:4000
 
 ## Testing
 
-| Layer             | Tooling                     | Covers                                                                                                                              |
-| ----------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| Shared logic      | Vitest (120+ tests)         | Filters, Sydney dates and daylight saving, money and LVR, CSV safety, templates, lock rules, AI redaction and parsing               |
-| Web               | Vitest                      | Route guard, session JWT verification, ordered request queue, autosave timing                                                       |
-| API (integration) | Jest + supertest + Postgres | Auth and rate limits, **brokerage isolation**, **roles and invites**, the audit log, the note lifecycle, the finalise lock, CSV, AI |
-| End to end        | Playwright                  | Real browser flows on **desktop and mobile** across both apps, including AI (mock provider)                                         |
+| Layer             | Tooling                     | Covers                                                                                                                                    |
+| ----------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Shared logic      | Vitest (130+ tests)         | Filters, Sydney dates and daylight saving, money and LVR, CSV safety, templates, lock rules, AI redaction and parsing                     |
+| Web               | Vitest                      | Route guard, session JWT verification, ordered request queue, autosave timing                                                             |
+| API (integration) | Jest + supertest + Postgres | Auth and rate limits, **brokerage isolation**, roles and invites, **cases and the dashboard**, the audit log, the note lifecycle, CSV, AI |
+| End to end        | Playwright                  | Real browser flows on **desktop and mobile** across both apps, including AI (mock provider)                                               |
 
 **CI** (GitHub Actions) runs lint, format, typecheck, unit tests, a **database migration and drift check**,
 **API integration tests on Postgres 17**, the build, **E2E**, CodeQL, dependency review and npm audit. A single
@@ -192,18 +203,19 @@ Every phase's PR is in the [closed pull requests](https://github.com/Grohit22013
 
 ## Key design decisions
 
-| Decision                                                   | Why                                                                                         |
-| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| Separate **NestJS API** + Next.js UI in a **monorepo**     | Clear frontend/backend boundary, with shared schemas and types so the two can't drift apart |
-| **Australian** focus, built around RG 273                  | Matches the hiring context, and gives the notes a compliance purpose beyond plain text      |
-| Tiptap JSON **plus** a plain-text copy                     | JSON keeps formatting exact; the text copy powers search, snippets and AI                   |
-| Finalise lock + amendments, soft delete                    | A compliance record must never be silently rewritten or removed                             |
-| Follow-ups as **Sydney calendar days**                     | "Due today" must match the broker's day, not the server's UTC day                           |
-| **One** structured AI call, cached, free models, redaction | Lowest cost and risk; no multi-step agent for a single-note task                            |
-| **Ordered** browser mutations                              | `fetch` runs in parallel; edits must land in the order they were made                       |
-| Mobile-first, accessible                                   | Brokers write notes between meetings; every control has an accessible name and 44px targets |
-| Roles checked against the **database** on every request    | A demoted or deactivated member loses access at once, not when their session token expires  |
-| Invite **links**, not emails                               | No email provider needed; single-use, expiring, email-bound tokens, stored only as hashes   |
+| Decision                                                   | Why                                                                                                             |
+| ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Separate **NestJS API** + Next.js UI in a **monorepo**     | Clear frontend/backend boundary, with shared schemas and types so the two can't drift apart                     |
+| **Australian** focus, built around RG 273                  | Matches the hiring context, and gives the notes a compliance purpose beyond plain text                          |
+| Tiptap JSON **plus** a plain-text copy                     | JSON keeps formatting exact; the text copy powers search, snippets and AI                                       |
+| Finalise lock + amendments, soft delete                    | A compliance record must never be silently rewritten or removed                                                 |
+| Follow-ups as **Sydney calendar days**                     | "Due today" must match the broker's day, not the server's UTC day                                               |
+| **One** structured AI call, cached, free models, redaction | Lowest cost and risk; no multi-step agent for a single-note task                                                |
+| **Ordered** browser mutations                              | `fetch` runs in parallel; edits must land in the order they were made                                           |
+| Mobile-first, accessible                                   | Brokers write notes between meetings; every control has an accessible name and 44px targets                     |
+| Cases separate from notes; a case fixes its client         | A deal has its own lifecycle; notes stay the evidence. Linking a note to a case can't leave a mismatched client |
+| Roles checked against the **database** on every request    | A demoted or deactivated member loses access at once, not when their session token expires                      |
+| Invite **links**, not emails                               | No email provider needed; single-use, expiring, email-bound tokens, stored only as hashes                       |
 
 ## Limitations and next steps
 
@@ -212,4 +224,4 @@ Every phase's PR is in the [closed pull requests](https://github.com/Grohit22013
 - File attachments aren't supported, because they need paid file storage.
 - Render's free plan sleeps when idle; the keep-warm workflow helps during business hours.
 - Free AI models can be rate-limited upstream. The app falls back across free models and explains when it's busy.
-- Coming next (from the product research): a dashboard and **mortgage cases** (Phase 9), **follow-up tasks** (Phase 10), and editor extras such as edit-conflict detection and draft recovery (Phase 11).
+- Coming next (from the product research): **follow-up tasks** (Phase 10), and editor extras such as edit-conflict detection and draft recovery (Phase 11).
