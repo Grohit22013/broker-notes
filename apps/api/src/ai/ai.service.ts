@@ -18,7 +18,10 @@ import { AI_DAILY_LIMIT, isFreeModel } from "@broker-notes/shared/ai/config";
 import { redact } from "@broker-notes/shared/ai/redact";
 import { startOfZonedDay } from "@broker-notes/shared/dates";
 import type { AiStatusDto, NoteAnalysisDto } from "@broker-notes/shared/dto";
+import { displayTitle } from "@broker-notes/shared/notes/content";
 
+import { AuditService } from "../audit/audit.service";
+import type { SessionUser } from "../auth/auth.guard";
 import { PrismaService } from "../prisma/prisma.service";
 
 import { OpenRouterClient } from "./openrouter.client";
@@ -38,6 +41,7 @@ export class AiService {
   constructor(
     private readonly db: PrismaService,
     private readonly client: OpenRouterClient,
+    private readonly audit: AuditService,
   ) {}
 
   async status(userId: string): Promise<AiStatusDto> {
@@ -53,8 +57,9 @@ export class AiService {
   }
 
   /** The stored analysis for a note (if any), flagged stale if the note changed since. */
-  async latest(userId: string, noteId: string): Promise<NoteAnalysisDto | null> {
-    const note = await this.load(userId, noteId);
+  async latest(actor: SessionUser, noteId: string): Promise<NoteAnalysisDto | null> {
+    const userId = actor.id;
+    const note = await this.load(actor, noteId);
     if (!note.aiAnalysis || !note.aiAnalysedAt) return null;
     const parsed = analysisSchema.safeParse(note.aiAnalysis);
     if (!parsed.success) return null;
@@ -69,8 +74,9 @@ export class AiService {
     };
   }
 
-  async analyse(userId: string, noteId: string, force = false): Promise<NoteAnalysisDto> {
-    const note = await this.load(userId, noteId);
+  async analyse(actor: SessionUser, noteId: string, force = false): Promise<NoteAnalysisDto> {
+    const userId = actor.id;
+    const note = await this.load(actor, noteId);
     if (note.contentText.trim().length < MIN_TEXT) {
       throw new BadRequestException("Write a little more in this note before analysing it.");
     }
@@ -126,6 +132,13 @@ export class AiService {
       },
     });
     if (!result.ok) throw new ServiceUnavailableException(result.error);
+    await this.audit.record(actor, {
+      action: "ai.analysed",
+      summary: `Ran AI assist on “${displayTitle(note.title)}”`,
+      entityType: "note",
+      entityId: noteId,
+      metadata: { model: result.model },
+    });
 
     const analysedAt = new Date();
     await this.db.note.update({
@@ -151,9 +164,9 @@ export class AiService {
     };
   }
 
-  private async load(userId: string, noteId: string) {
+  private async load(actor: SessionUser, noteId: string) {
     const note = await this.db.note.findFirst({
-      where: { id: noteId, userId, deletedAt: null },
+      where: { id: noteId, organisationId: actor.organisationId, deletedAt: null },
       select: {
         title: true,
         contentText: true,

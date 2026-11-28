@@ -55,8 +55,9 @@ Run once against the production database, from your machine with the production 
 DATABASE_URL="<neon pooled url>" npm run db:seed
 ```
 
-This creates `demo@brokernotes.dev` / `demo1234` with clients and realistic notes. Set `SEED_PASSWORD`
-to choose a different password.
+This creates the demo brokerage _Harbour Home Loans_ with three members: `demo@brokernotes.dev` (Admin),
+`adviser@brokernotes.dev` and `casemanager@brokernotes.dev`, all with password `demo1234`. It also creates
+clients, realistic notes and an audit trail. Set `SEED_PASSWORD` to choose a different password.
 
 ## 4. Keep the API warm (optional)
 

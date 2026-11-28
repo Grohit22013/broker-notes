@@ -1,14 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft, FileText, Mail, Pencil, Phone, Plus } from "lucide-react";
+import { ChevronLeft, FileText, Mail, Pencil, Phone, Plus, UserRoundCheck } from "lucide-react";
 
 import { ClientFormDialog } from "@/components/clients/client-form-dialog";
 import { NoteCard } from "@/components/notes/note-card";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser, requireUser } from "@/lib/auth/session";
-import { getClient } from "@/lib/api/queries";
+import { activeMembers, getClient } from "@/lib/api/queries";
+import { canManageClients } from "@broker-notes/shared/orgs/roles";
 import { formatDateTime, initials } from "@/lib/format";
 import { parseNoteFilters } from "@broker-notes/shared/notes/filters";
 import { listNotes } from "@/lib/api/queries";
@@ -25,11 +26,15 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function ClientPage({ params }: Props) {
   const { id } = await params;
-  await requireUser();
-  const client = await getClient(id);
+  const user = await requireUser();
+  const canManage = canManageClients(user);
+  const [client, advisers] = await Promise.all([
+    getClient(id),
+    canManage ? activeMembers() : Promise.resolve([]),
+  ]);
   if (!client) notFound();
 
-  // Timeline: this client's notes, newest first (pinned still on top).
+  // Timeline: this client's notes (everyone in the brokerage), newest first, pinned on top.
   const notes = await listNotes(parseNoteFilters({ client: client.id }));
 
   return (
@@ -66,19 +71,34 @@ export default async function ClientPage({ params }: Props) {
                   <Phone className="size-3.5" aria-hidden /> {client.phone}
                 </a>
               ) : null}
+              {client.assignedAdviser ? (
+                <span className="flex items-center gap-1.5">
+                  <UserRoundCheck className="size-3.5" aria-hidden /> Adviser:{" "}
+                  {client.assignedAdviser.name}
+                </span>
+              ) : null}
               <span>Client since {formatDateTime(new Date(client.createdAt)).split(",")[0]}</span>
             </div>
           </div>
         </div>
         <div className="flex gap-2">
-          <ClientFormDialog
-            client={{ id: client.id, name: client.name, email: client.email, phone: client.phone }}
-            trigger={
-              <Button variant="outline" className="h-10">
-                <Pencil className="size-4" aria-hidden /> Edit
-              </Button>
-            }
-          />
+          {canManage ? (
+            <ClientFormDialog
+              advisers={advisers}
+              client={{
+                id: client.id,
+                name: client.name,
+                email: client.email,
+                phone: client.phone,
+                assignedAdviser: client.assignedAdviser,
+              }}
+              trigger={
+                <Button variant="outline" className="h-10">
+                  <Pencil className="size-4" aria-hidden /> Edit
+                </Button>
+              }
+            />
+          ) : null}
           <Button asChild className="h-10">
             <Link href={`/notes/new?client=${client.id}`}>
               <Plus className="size-4" aria-hidden /> New note
@@ -104,7 +124,7 @@ export default async function ClientPage({ params }: Props) {
       ) : (
         <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {notes.map((n) => (
-            <NoteCard key={n.id} note={toNoteCardData(n)} hideClient />
+            <NoteCard key={n.id} note={toNoteCardData(n, user)} hideClient />
           ))}
         </ul>
       )}

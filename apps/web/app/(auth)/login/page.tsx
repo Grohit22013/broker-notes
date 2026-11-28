@@ -9,9 +9,9 @@ export const metadata: Metadata = { title: "Sign in" };
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ callbackUrl?: string }>;
+  searchParams: Promise<{ callbackUrl?: string; ended?: string }>;
 }) {
-  const { callbackUrl } = await searchParams;
+  const { callbackUrl, ended } = await searchParams;
 
   return (
     <div className="space-y-8">
@@ -19,6 +19,13 @@ export default async function LoginPage({
         <h1 className="text-2xl font-semibold tracking-tight">Welcome back</h1>
         <p className="text-muted-foreground text-sm">Sign in to your client file notes.</p>
       </div>
+
+      {ended ? (
+        <p role="status" className="bg-muted text-muted-foreground rounded-md p-3 text-sm">
+          Your session has ended. Please sign in again. If your account was deactivated, contact
+          your brokerage admin.
+        </p>
+      ) : null}
 
       <LoginForm callbackUrl={callbackUrl ? safeRedirect(callbackUrl) : undefined} />
 

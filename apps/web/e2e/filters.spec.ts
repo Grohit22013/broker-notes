@@ -15,6 +15,7 @@ async function seedNotes(email: string, notes: Seed[]) {
     await db.note.create({
       data: {
         userId: user.id,
+        organisationId: user.organisationId,
         title: n.title,
         contentText: n.text,
         contentJson: {

@@ -18,6 +18,7 @@ describe("parseNoteFilters", () => {
       tag: undefined,
       client: undefined,
       due: false,
+      mine: false,
       sort: "updated",
     });
   });
@@ -38,6 +39,7 @@ describe("parseNoteFilters", () => {
       tag: "refinance",
       client: undefined,
       due: true,
+      mine: false,
       sort: "followup",
     });
   });
@@ -74,24 +76,26 @@ describe("activeFilterCount / hasAnyFilter", () => {
   });
 });
 
+const scope = { organisationId: "o1", userId: "u1" };
+
 describe("buildNoteWhere", () => {
   const now = new Date("2026-12-02T23:00:00Z"); // 3 Dec in Sydney
 
-  it("always scopes to the owner and excludes deleted notes", () => {
-    expect(buildNoteWhere("u1", parseNoteFilters({}), now)).toEqual({
-      userId: "u1",
+  it("always scopes to the organisation and excludes deleted notes", () => {
+    expect(buildNoteWhere(scope, parseNoteFilters({}), now)).toEqual({
+      organisationId: "o1",
       deletedAt: null,
     });
   });
 
   it("adds each filter as an AND clause", () => {
     const where = buildNoteWhere(
-      "u1",
+      scope,
       parseNoteFilters({ q: "anz", stage: "LEAD", type: "REVIEW", tag: "smsf", due: "1" }),
       now,
     );
     expect(where).toEqual({
-      userId: "u1",
+      organisationId: "o1",
       deletedAt: null,
       AND: [
         {
@@ -119,9 +123,9 @@ describe("client filter", () => {
   });
 
   it("narrows by clientId", () => {
-    const where = buildNoteWhere("u1", parseNoteFilters({ client: "cmwzdoxp20000e9249ao6x6jh" }));
+    const where = buildNoteWhere(scope, parseNoteFilters({ client: "cmwzdoxp20000e9249ao6x6jh" }));
     expect(where).toEqual({
-      userId: "u1",
+      organisationId: "o1",
       deletedAt: null,
       AND: [{ clientId: "cmwzdoxp20000e9249ao6x6jh" }],
     });
@@ -140,6 +144,19 @@ describe("buildNoteOrderBy", () => {
   it("sorts follow-ups soonest first with empty dates last", () => {
     expect(buildNoteOrderBy("followup")[1]).toEqual({
       followUpAt: { sort: "asc", nulls: "last" },
+    });
+  });
+});
+
+describe("created by me", () => {
+  it("parses mine=1 and narrows to the signed-in author", () => {
+    const f = parseNoteFilters({ mine: "1" });
+    expect(f.mine).toBe(true);
+    expect(parseNoteFilters({ mine: "yes" }).mine).toBe(false);
+    expect(buildNoteWhere(scope, f)).toEqual({
+      organisationId: "o1",
+      deletedAt: null,
+      AND: [{ userId: "u1" }],
     });
   });
 });

@@ -11,11 +11,15 @@ import { registerAction, type AuthFormState } from "@/lib/api/auth-actions";
 
 const initialState: AuthFormState<RegisterInput> = {};
 
-export function RegisterForm() {
+/** When joining by invite the email is fixed and no brokerage is created. */
+export type RegisterInvite = { token: string; email: string };
+
+export function RegisterForm({ invite }: { invite?: RegisterInvite }) {
   const [state, formAction, pending] = useActionState(registerAction, initialState);
 
   return (
     <form action={formAction} className="space-y-5" noValidate>
+      {invite ? <input type="hidden" name="inviteToken" value={invite.token} /> : null}
       {state.error ? (
         <div
           role="alert"
@@ -43,9 +47,22 @@ export function RegisterForm() {
         autoCapitalize="none"
         spellCheck={false}
         required
-        defaultValue={state.values?.email}
+        readOnly={Boolean(invite)}
+        hint={invite ? "This invite is for this email address." : undefined}
+        defaultValue={invite?.email ?? state.values?.email}
         error={state.fieldErrors?.email}
       />
+      {invite ? null : (
+        <FormField
+          label="Brokerage name (optional)"
+          name="organisationName"
+          autoComplete="organization"
+          placeholder="e.g. Harbour Home Loans"
+          hint="You'll be its admin and can invite advisers and case managers."
+          defaultValue={state.values?.organisationName}
+          error={state.fieldErrors?.organisationName}
+        />
+      )}
       <FormField
         label="Password"
         name="password"
@@ -64,8 +81,8 @@ export function RegisterForm() {
         error={state.fieldErrors?.confirmPassword}
       />
 
-      <SubmitButton pending={pending} pendingText="Creating account…">
-        Create account
+      <SubmitButton pending={pending} pendingText={invite ? "Joining…" : "Creating account…"}>
+        {invite ? "Join brokerage" : "Create account"}
       </SubmitButton>
     </form>
   );

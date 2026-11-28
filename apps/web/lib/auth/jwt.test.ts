@@ -18,13 +18,28 @@ beforeAll(() => {
 });
 
 describe("verifySession (API-issued session JWT)", () => {
-  it("accepts a valid token and maps the claims", async () => {
-    const token = await sign({ sub: "u1", name: "Asha", email: "asha@example.com" });
+  it("accepts a valid token and maps the claims, including role and brokerage", async () => {
+    const token = await sign({
+      sub: "u1",
+      name: "Asha",
+      email: "asha@example.com",
+      role: "CASE_MANAGER",
+      org: "o1",
+      orgName: "Harbour Home Loans",
+    });
     await expect(verifySession(token)).resolves.toEqual({
       id: "u1",
       name: "Asha",
       email: "asha@example.com",
+      role: "CASE_MANAGER",
+      organisationId: "o1",
+      organisationName: "Harbour Home Loans",
     });
+  });
+
+  it("treats unknown or missing roles as Adviser (pre-roles sessions; the API re-checks)", async () => {
+    const forged = await sign({ sub: "u1", email: "a@b.co", role: "SUPERUSER" });
+    expect((await verifySession(forged))?.role).toBe("ADVISER");
   });
 
   it("rejects missing, tampered, wrongly-signed and expired tokens", async () => {
@@ -57,6 +72,9 @@ describe("verifySession (API-issued session JWT)", () => {
       id: "u1",
       name: "a@b.co",
       email: "a@b.co",
+      role: "ADVISER",
+      organisationId: "",
+      organisationName: "",
     });
   });
 });

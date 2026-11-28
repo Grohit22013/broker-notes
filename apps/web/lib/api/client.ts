@@ -43,9 +43,9 @@ async function request<T>(method: Method, path: string, body?: unknown): Promise
 
   const err = json as Partial<ApiErrorBody> | null;
   if (res.status === 401 && typeof window !== "undefined" && !path.startsWith("/auth/")) {
-    // Session expired mid-use: send the broker to sign in, then back here.
+    // Session ended mid-use (expired or deactivated): clear it, sign in, then come back here.
     const back = `${window.location.pathname}${window.location.search}`;
-    window.location.assign(`/login?callbackUrl=${encodeURIComponent(back)}`);
+    window.location.assign(`/session-ended?callbackUrl=${encodeURIComponent(back)}`);
   }
   return {
     ok: false,

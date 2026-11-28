@@ -9,7 +9,8 @@ import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { requireUser } from "@/lib/auth/session";
-import { existingClientEmails, listClients } from "@/lib/api/queries";
+import { activeMembers, existingClientEmails, listClients } from "@/lib/api/queries";
+import { canExport, canManageClients } from "@broker-notes/shared/orgs/roles";
 import { formatRelative, initials } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Clients" };
@@ -18,31 +19,41 @@ type Props = { searchParams: Promise<{ q?: string | string[] }> };
 
 export default async function ClientsPage({ searchParams }: Props) {
   // Defence in depth: middleware already guards this route.
-  await requireUser();
+  const user = await requireUser();
   const raw = (await searchParams).q;
   const q = (Array.isArray(raw) ? raw[0] : raw)?.trim().slice(0, 100) ?? "";
-  const [clients, emails] = await Promise.all([listClients(q), existingClientEmails()]);
+  const canManage = canManageClients(user);
+  const [clients, emails, advisers] = await Promise.all([
+    listClients(q),
+    canManage ? existingClientEmails() : [],
+    canManage ? activeMembers() : [],
+  ]);
   const hasAny = clients.length > 0 || q.length > 0;
 
-  const addButton = (
+  const addButton = canManage ? (
     <ClientFormDialog
+      advisers={advisers}
       trigger={
         <Button className="h-10">
           <Plus className="size-4" aria-hidden /> New client
         </Button>
       }
     />
-  );
+  ) : null;
 
   return (
     <div className="container-page">
       <PageHeader
         title="Clients"
-        description="Everyone you're helping into a home loan, with their file notes."
+        description={
+          canManage
+            ? "Everyone your brokerage is helping into a home loan, with their file notes."
+            : "Your brokerage's clients. Case managers can view clients and write notes for them."
+        }
         actions={
           <>
-            <ImportClientsDialog existingEmails={[...emails]} />
-            {hasAny ? (
+            {canManage ? <ImportClientsDialog existingEmails={[...emails]} /> : null}
+            {hasAny && canExport(user) ? (
               <Button asChild variant="outline" className="h-10">
                 <a href="/api/export/clients" download aria-label="Export CSV">
                   <Download className="size-4" aria-hidden />
@@ -113,6 +124,7 @@ export default async function ClientsPage({ searchParams }: Props) {
                       <span className="text-muted-foreground mt-2 block text-xs">
                         {c.noteCount} {c.noteCount === 1 ? "note" : "notes"}
                         {c.lastNoteAt ? ` · last ${formatRelative(new Date(c.lastNoteAt))}` : ""}
+                        {c.assignedAdviser ? ` · ${c.assignedAdviser.name}` : ""}
                       </span>
                     </span>
                   </Link>

@@ -11,9 +11,9 @@ import type { AuthUserDto } from "@broker-notes/shared/dto";
 import type { Response } from "express";
 
 import { ZodBody, ZodPipe } from "../common/zod";
-import { loadConfig, SESSION_COOKIE, SESSION_MAX_AGE_S } from "../config";
+import { SESSION_COOKIE, SESSION_MAX_AGE_S } from "../config";
 
-import { CurrentUser, Public, type SessionUser } from "./auth.guard";
+import { CurrentUser, Public, sessionCookieOptions, type SessionUser } from "./auth.guard";
 import { AuthService } from "./auth.service";
 
 /**
@@ -32,7 +32,12 @@ export class AuthController {
   @Public()
   @Throttle(AUTH_THROTTLE)
   @Post("register")
-  @ApiOperation({ summary: "Create a broker account and start a session" })
+  @ApiOperation({
+    summary: "Create an account and start a session",
+    description:
+      "Without inviteToken: creates a new brokerage with you as its admin. With inviteToken: " +
+      "joins the inviting brokerage with the invited role (email must match the invite).",
+  })
   @ZodBody(registerSchema)
   async register(
     @Body(new ZodPipe(registerSchema)) body: RegisterInput,
@@ -68,9 +73,9 @@ export class AuthController {
 
   @Get("me")
   @ApiCookieAuth(SESSION_COOKIE)
-  @ApiOperation({ summary: "The signed-in broker" })
-  me(@CurrentUser() user: SessionUser): Promise<AuthUserDto> {
-    return this.auth.me(user.id);
+  @ApiOperation({ summary: "The signed-in member, their role and brokerage" })
+  me(@CurrentUser() user: SessionUser): AuthUserDto {
+    return user;
   }
 
   private async setSession(res: Response, user: AuthUserDto) {
@@ -81,11 +86,6 @@ export class AuthController {
   }
 
   private cookieOptions() {
-    return {
-      httpOnly: true,
-      sameSite: "lax" as const,
-      secure: loadConfig().cookieSecure,
-      path: "/",
-    };
+    return sessionCookieOptions();
   }
 }

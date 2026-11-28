@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
@@ -22,7 +23,7 @@ import type {
   VersionDetailDto,
   VersionDto,
 } from "@broker-notes/shared/dto";
-import { EMPTY_DOC, isDocJson } from "@broker-notes/shared/notes/content";
+import { displayTitle, EMPTY_DOC, isDocJson } from "@broker-notes/shared/notes/content";
 import {
   buildNoteOrderBy,
   buildNoteWhere,
@@ -34,12 +35,16 @@ import { noteFromTemplate } from "@broker-notes/shared/notes/templates";
 import type { z } from "zod";
 import type { updateNoteMetaSchema, updateNoteSchema } from "@broker-notes/shared/notes/validation";
 import { jsonEqual, shouldSnapshot } from "@broker-notes/shared/notes/versioning";
+import { canEditNote } from "@broker-notes/shared/orgs/roles";
 
+import { AuditService } from "../audit/audit.service";
+import type { SessionUser } from "../auth/auth.guard";
 import { PrismaService } from "../prisma/prisma.service";
 
 const LIST_LIMIT = 200;
 const EXPORT_LIMIT = 5000;
 const FINALISED_MESSAGE = "This note is finalised. Add an amendment instead of editing it.";
+const NOT_AUTHOR_MESSAGE = "Only the note's author or a brokerage admin can change this note.";
 
 const listSelect = {
   id: true,
@@ -55,6 +60,7 @@ const listSelect = {
   status: true,
   keyFigures: true,
   client: { select: { id: true, name: true } },
+  user: { select: { id: true, name: true } },
 } satisfies Prisma.NoteSelect;
 
 type ListRow = Prisma.NoteGetPayload<{ select: typeof listSelect }>;
@@ -74,23 +80,54 @@ function toListItem(r: ListRow): NoteListItemDto {
     status: r.status,
     keyFigures: parseKeyFigures(r.keyFigures),
     client: r.client,
+    author: r.user,
   };
 }
 
 type SaveInput = Omit<z.output<typeof updateNoteSchema>, "id">;
 type MetaInput = Omit<z.output<typeof updateNoteMetaSchema>, "id">;
 
+type Tx = Prisma.TransactionClient;
+
 /**
- * All note business logic. Every query is scoped by the broker's user id — another broker's
- * note id simply doesn't exist from this user's point of view (404, never 403).
+ * All note business logic. Every query is scoped by the member's organisation — another
+ * brokerage's note id simply doesn't exist from this member's point of view (404, never 403).
+ * Inside the brokerage everyone may read; only the author or an admin may change a note (403).
  */
 @Injectable()
 export class NotesService {
-  constructor(private readonly db: PrismaService) {}
+  constructor(
+    private readonly db: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
-  async list(userId: string, filters: NoteFilters, now = new Date()): Promise<NoteListItemDto[]> {
+  /**
+   * Loads a note the actor may change, or throws 404 (not in their brokerage) / 403 (another
+   * member's note and the actor isn't an admin).
+   */
+  private async editable(tx: Tx | PrismaService, actor: SessionUser, id: string) {
+    const note = await tx.note.findFirst({
+      where: { id, organisationId: actor.organisationId, deletedAt: null },
+      select: {
+        userId: true,
+        title: true,
+        status: true,
+        contentJson: true,
+        versions: { orderBy: { createdAt: "desc" }, take: 1, select: { createdAt: true } },
+      },
+    });
+    if (!note) throw new NotFoundException("Note not found");
+    if (!canEditNote(actor, note.userId)) throw new ForbiddenException(NOT_AUTHOR_MESSAGE);
+    return note;
+  }
+
+  async list(
+    actor: SessionUser,
+    filters: NoteFilters,
+    now = new Date(),
+  ): Promise<NoteListItemDto[]> {
     const rows = await this.db.note.findMany({
-      where: buildNoteWhere(userId, filters, now) as Prisma.NoteWhereInput,
+      where: buildNoteWhere(scopeOf(actor), filters, now) as Prisma.NoteWhereInput,
       orderBy: buildNoteOrderBy(filters.sort) as Prisma.NoteOrderByWithRelationInput[],
       select: listSelect,
       take: LIST_LIMIT,
@@ -98,8 +135,8 @@ export class NotesService {
     return rows.map(toListItem);
   }
 
-  async facets(userId: string, now = new Date()): Promise<NoteFacetsDto> {
-    const base = { userId, deletedAt: null };
+  async facets(actor: SessionUser, now = new Date()): Promise<NoteFacetsDto> {
+    const base = { organisationId: actor.organisationId, deletedAt: null };
     const [total, dueCount, tagRows] = await Promise.all([
       this.db.note.count({ where: base }),
       this.db.note.count({ where: { ...base, followUpAt: { lt: startOfNextZonedDay(now) } } }),
@@ -114,9 +151,9 @@ export class NotesService {
     return { total, dueCount, tags };
   }
 
-  async get(userId: string, id: string): Promise<NoteDetailDto> {
+  async get(actor: SessionUser, id: string): Promise<NoteDetailDto> {
     const note = await this.db.note.findFirst({
-      where: { id, userId, deletedAt: null },
+      where: { id, organisationId: actor.organisationId, deletedAt: null },
       select: {
         ...listSelect,
         contentJson: true,
@@ -136,43 +173,48 @@ export class NotesService {
     };
   }
 
-  async create(userId: string, templateId: string, clientId?: string): Promise<CreatedNoteDto> {
+  async create(actor: SessionUser, templateId: string, clientId?: string): Promise<CreatedNoteDto> {
     const client = clientId
       ? await this.db.client.findFirst({
-          where: { id: clientId, userId },
+          where: { id: clientId, organisationId: actor.organisationId },
           select: { id: true, name: true },
         })
       : null;
     if (clientId && !client) throw new NotFoundException("Client not found");
     const { contentJson, noteType, title } = noteFromTemplate(templateId, client?.name);
-    const note = await this.db.note.create({
-      data: {
-        userId,
-        title,
-        contentJson,
-        noteType,
-        clientId: client?.id ?? null,
-        versions: { create: { title, contentJson } },
-      },
-      select: { id: true },
+    return this.db.$transaction(async (tx) => {
+      const note = await tx.note.create({
+        data: {
+          organisationId: actor.organisationId,
+          userId: actor.id,
+          title,
+          contentJson,
+          noteType,
+          clientId: client?.id ?? null,
+          versions: { create: { title, contentJson } },
+        },
+        select: { id: true },
+      });
+      await this.audit.record(
+        actor,
+        {
+          action: "note.created",
+          summary: `Created “${displayTitle(title)}”`,
+          entityType: "note",
+          entityId: note.id,
+          metadata: { template: templateId },
+        },
+        tx,
+      );
+      return note;
     });
-    return note;
   }
 
   /** Autosave. Snapshots the *previous* state at most once per window (see versioning.ts). */
-  async saveContent(userId: string, id: string, input: SaveInput): Promise<SavedNoteDto> {
+  async saveContent(actor: SessionUser, id: string, input: SaveInput): Promise<SavedNoteDto> {
     const { title, contentJson, contentText } = input;
     const updated = await this.db.$transaction(async (tx) => {
-      const existing = await tx.note.findFirst({
-        where: { id, userId, deletedAt: null },
-        select: {
-          title: true,
-          contentJson: true,
-          status: true,
-          versions: { orderBy: { createdAt: "desc" }, take: 1, select: { createdAt: true } },
-        },
-      });
-      if (!existing) throw new NotFoundException("Note not found");
+      const existing = await this.editable(tx, actor, id);
       if (!canEditContent(existing.status)) throw new ConflictException(FINALISED_MESSAGE);
 
       const changed = existing.title !== title || !jsonEqual(existing.contentJson, contentJson);
@@ -202,19 +244,17 @@ export class NotesService {
   }
 
   /** Details update. On finalised notes only workflow fields may change (server-enforced). */
-  async updateMeta(userId: string, id: string, input: MetaInput): Promise<NoteMetaDto> {
-    const current = await this.db.note.findFirst({
-      where: { id, userId, deletedAt: null },
-      select: { status: true },
-    });
-    if (!current) throw new NotFoundException("Note not found");
+  async updateMeta(actor: SessionUser, id: string, input: MetaInput): Promise<NoteMetaDto> {
+    const current = await this.editable(this.db, actor, id);
 
     const provided = Object.keys(input).filter((k) => input[k as keyof MetaInput] !== undefined);
     if (lockedFieldIn(current.status, provided)) throw new ConflictException(FINALISED_MESSAGE);
 
     const { followUpDate, keyFigures, clientId, ...rest } = input;
     if (clientId) {
-      const owns = await this.db.client.count({ where: { id: clientId, userId } });
+      const owns = await this.db.client.count({
+        where: { id: clientId, organisationId: actor.organisationId },
+      });
       if (!owns) throw new NotFoundException("Client not found");
     }
 
@@ -229,13 +269,29 @@ export class NotesService {
       data.keyFigures = Object.keys(cleaned).length ? cleaned : Prisma.DbNull;
     }
 
-    await this.db.note.updateMany({ where: { id, userId, deletedAt: null }, data });
-    return this.meta(userId, id);
+    await this.db.$transaction(async (tx) => {
+      await tx.note.updateMany({
+        where: { id, organisationId: actor.organisationId, deletedAt: null },
+        data,
+      });
+      await this.audit.record(
+        actor,
+        {
+          action: "note.details_updated",
+          summary: `Updated details of “${displayTitle(current.title)}” (${provided.join(", ")})`,
+          entityType: "note",
+          entityId: id,
+          metadata: { fields: provided },
+        },
+        tx,
+      );
+    });
+    return this.meta(actor, id);
   }
 
-  async meta(userId: string, id: string): Promise<NoteMetaDto> {
+  async meta(actor: SessionUser, id: string): Promise<NoteMetaDto> {
     const n = await this.db.note.findFirst({
-      where: { id, userId },
+      where: { id, organisationId: actor.organisationId },
       select: {
         noteType: true,
         loanStage: true,
@@ -262,13 +318,9 @@ export class NotesService {
   }
 
   /** Locks the note as a compliance record, with a final snapshot. Irreversible by design. */
-  async finalise(userId: string, id: string): Promise<void> {
+  async finalise(actor: SessionUser, id: string): Promise<void> {
     const done = await this.db.$transaction(async (tx) => {
-      const note = await tx.note.findFirst({
-        where: { id, userId, deletedAt: null },
-        select: { title: true, contentJson: true, status: true },
-      });
-      if (!note) throw new NotFoundException("Note not found");
+      const note = await this.editable(tx, actor, id);
       if (note.status === "FINALISED") return false;
       await tx.noteVersion.create({
         data: { noteId: id, title: note.title, contentJson: note.contentJson ?? EMPTY_DOC },
@@ -277,34 +329,55 @@ export class NotesService {
         where: { id },
         data: { status: "FINALISED", finalisedAt: new Date() },
       });
+      await this.audit.record(
+        actor,
+        {
+          action: "note.finalised",
+          summary: `Finalised “${displayTitle(note.title)}”`,
+          entityType: "note",
+          entityId: id,
+        },
+        tx,
+      );
       return true;
     });
     if (!done) throw new ConflictException("This note is already finalised.");
   }
 
-  async addAmendment(userId: string, id: string, body: string): Promise<AmendmentDto> {
-    const note = await this.db.note.findFirst({
-      where: { id, userId, deletedAt: null },
-      select: { status: true },
-    });
-    if (!note) throw new NotFoundException("Note not found");
+  async addAmendment(actor: SessionUser, id: string, body: string): Promise<AmendmentDto> {
+    const note = await this.editable(this.db, actor, id);
     if (note.status !== "FINALISED") {
       throw new BadRequestException(
         "Amendments are for finalised notes — edit the draft directly.",
       );
     }
-    const [amendment] = await this.db.$transaction([
-      this.db.noteAmendment.create({
+    const amendment = await this.db.$transaction(async (tx) => {
+      const created = await tx.noteAmendment.create({
         data: { noteId: id, body },
         select: { id: true, body: true, createdAt: true },
-      }),
-      this.db.note.update({ where: { id }, data: { updatedAt: new Date() }, select: { id: true } }),
-    ]);
+      });
+      await tx.note.update({
+        where: { id },
+        data: { updatedAt: new Date() },
+        select: { id: true },
+      });
+      await this.audit.record(
+        actor,
+        {
+          action: "note.amended",
+          summary: `Added an amendment to “${displayTitle(note.title)}”`,
+          entityType: "note",
+          entityId: id,
+        },
+        tx,
+      );
+      return created;
+    });
     return { ...amendment, createdAt: amendment.createdAt.toISOString() };
   }
 
-  async versions(userId: string, id: string): Promise<VersionDto[]> {
-    await this.assertOwns(userId, id);
+  async versions(actor: SessionUser, id: string): Promise<VersionDto[]> {
+    await this.assertVisible(actor, id);
     const rows = await this.db.noteVersion.findMany({
       where: { noteId: id },
       orderBy: { createdAt: "desc" },
@@ -314,9 +387,13 @@ export class NotesService {
     return rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() }));
   }
 
-  async version(userId: string, id: string, versionId: string): Promise<VersionDetailDto> {
+  async version(actor: SessionUser, id: string, versionId: string): Promise<VersionDetailDto> {
     const v = await this.db.noteVersion.findFirst({
-      where: { id: versionId, noteId: id, note: { userId, deletedAt: null } },
+      where: {
+        id: versionId,
+        noteId: id,
+        note: { organisationId: actor.organisationId, deletedAt: null },
+      },
       select: { title: true, contentJson: true },
     });
     if (!v) throw new NotFoundException("Version not found");
@@ -324,32 +401,53 @@ export class NotesService {
   }
 
   /** Records the current state as a version (used right before restoring an older one). */
-  async snapshot(userId: string, id: string): Promise<void> {
-    const note = await this.db.note.findFirst({
-      where: { id, userId, deletedAt: null },
-      select: { title: true, contentJson: true, status: true },
-    });
-    if (!note) throw new NotFoundException("Note not found");
+  async snapshot(actor: SessionUser, id: string): Promise<void> {
+    const note = await this.editable(this.db, actor, id);
     if (note.status !== "DRAFT") throw new ConflictException(FINALISED_MESSAGE);
-    await this.db.noteVersion.create({
-      data: { noteId: id, title: note.title, contentJson: note.contentJson ?? EMPTY_DOC },
+    await this.db.$transaction(async (tx) => {
+      await tx.noteVersion.create({
+        data: { noteId: id, title: note.title, contentJson: note.contentJson ?? EMPTY_DOC },
+      });
+      await this.audit.record(
+        actor,
+        {
+          action: "note.version_restored",
+          summary: `Restored an earlier version of “${displayTitle(note.title)}”`,
+          entityType: "note",
+          entityId: id,
+        },
+        tx,
+      );
     });
   }
 
   /** Soft delete — file notes are compliance records, kept but hidden. */
-  async remove(userId: string, id: string): Promise<void> {
-    const { count } = await this.db.note.updateMany({
-      where: { id, userId, deletedAt: null },
-      data: { deletedAt: new Date() },
+  async remove(actor: SessionUser, id: string): Promise<void> {
+    const note = await this.editable(this.db, actor, id);
+    await this.db.$transaction(async (tx) => {
+      const { count } = await tx.note.updateMany({
+        where: { id, deletedAt: null },
+        data: { deletedAt: new Date() },
+      });
+      if (count === 0) throw new NotFoundException("Note not found");
+      await this.audit.record(
+        actor,
+        {
+          action: "note.deleted",
+          summary: `Deleted “${displayTitle(note.title)}” (kept for compliance)`,
+          entityType: "note",
+          entityId: id,
+        },
+        tx,
+      );
     });
-    if (count === 0) throw new NotFoundException("Note not found");
   }
 
   /** Rows for CSV export: same filters as the list. */
-  exportRows(userId: string, filters: NoteFilters) {
+  exportRows(actor: SessionUser, filters: NoteFilters) {
     return this.db.note
       .findMany({
-        where: buildNoteWhere(userId, filters) as Prisma.NoteWhereInput,
+        where: buildNoteWhere(scopeOf(actor), filters) as Prisma.NoteWhereInput,
         orderBy: buildNoteOrderBy(filters.sort) as Prisma.NoteOrderByWithRelationInput[],
         take: EXPORT_LIMIT,
         select: { ...listSelect, finalisedAt: true },
@@ -357,8 +455,15 @@ export class NotesService {
       .then((rows) => rows.map((r) => ({ ...r, keyFigures: parseKeyFigures(r.keyFigures) })));
   }
 
-  private async assertOwns(userId: string, id: string) {
-    const n = await this.db.note.count({ where: { id, userId, deletedAt: null } });
+  private async assertVisible(actor: SessionUser, id: string) {
+    const n = await this.db.note.count({
+      where: { id, organisationId: actor.organisationId, deletedAt: null },
+    });
     if (!n) throw new NotFoundException("Note not found");
   }
 }
+
+const scopeOf = (actor: SessionUser) => ({
+  organisationId: actor.organisationId,
+  userId: actor.id,
+});

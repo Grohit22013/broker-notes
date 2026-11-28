@@ -79,7 +79,11 @@ type Ctx = {
   tagSuggestions: string[];
   clients: ClientOption[];
   addClient: (c: ClientOption) => void;
+  /** Case managers can link existing clients but not create new ones. */
+  canAddClients: boolean;
   locked: boolean;
+  /** The viewer isn't the author or an admin: everything is view-only. */
+  readOnly: boolean;
 };
 
 const NoteDetailsContext = createContext<Ctx | null>(null);
@@ -96,12 +100,16 @@ export function NoteDetailsProvider({
   initial,
   tagSuggestions,
   clients: initialClients,
+  readOnly = false,
+  canAddClients = true,
   children,
 }: {
   noteId: string;
   initial: NoteMetaDto;
   tagSuggestions: string[];
   clients: ClientOption[];
+  readOnly?: boolean;
+  canAddClients?: boolean;
   children: React.ReactNode;
 }) {
   const router = useRouter();
@@ -115,6 +123,7 @@ export function NoteDetailsProvider({
 
   const update = useCallback(
     (patch: Patch) => {
+      if (readOnly) return;
       const previous = meta;
       setMeta((m) => ({ ...m, ...patch })); // optimistic
       startTransition(async () => {
@@ -128,7 +137,7 @@ export function NoteDetailsProvider({
         router.refresh();
       });
     },
-    [meta, noteId, router],
+    [meta, noteId, router, readOnly],
   );
 
   const addClient = useCallback(
@@ -148,8 +157,10 @@ export function NoteDetailsProvider({
       clients,
       addClient,
       locked: meta.status === "FINALISED",
+      readOnly,
+      canAddClients,
     }),
-    [meta, update, pending, open, tagSuggestions, clients, addClient],
+    [meta, update, pending, open, tagSuggestions, clients, addClient, readOnly, canAddClients],
   );
   return <NoteDetailsContext value={value}>{children}</NoteDetailsContext>;
 }
@@ -231,7 +242,8 @@ const NEW_CLIENT = "__new__";
 
 /** Side sheet on desktop, bottom sheet on phones. */
 export function NoteDetailsSheet() {
-  const { meta, update, pending, open, setOpen, tagSuggestions, locked } = useNoteDetails();
+  const { meta, update, pending, open, setOpen, tagSuggestions, locked, readOnly } =
+    useNoteDetails();
   const isDesktop = useMediaQuery("(min-width: 768px)");
   const ids = useId();
 
@@ -262,8 +274,13 @@ export function NoteDetailsSheet() {
           <SheetDescription>Used to organise, filter and export your notes.</SheetDescription>
         </SheetHeader>
 
-        <div className="grid gap-5 overflow-y-auto px-4 pb-8">
-          {locked ? (
+        <fieldset disabled={readOnly} className="grid min-w-0 gap-5 overflow-y-auto px-4 pb-8">
+          {readOnly ? (
+            <p className="bg-muted text-muted-foreground flex gap-2 rounded-md p-3 text-sm">
+              <Lock className="mt-0.5 size-4 shrink-0" aria-hidden />
+              View only: another member wrote this note. Only its author or an admin can change it.
+            </p>
+          ) : locked ? (
             <p className="bg-muted text-muted-foreground flex gap-2 rounded-md p-3 text-sm">
               <Lock className="mt-0.5 size-4 shrink-0" aria-hidden />
               This note is finalised: client, type and figures are locked. You can still update the
@@ -354,14 +371,14 @@ export function NoteDetailsSheet() {
 
           <Separator />
           <KeyFiguresFields />
-        </div>
+        </fieldset>
       </SheetContent>
     </Sheet>
   );
 }
 
 function ClientField() {
-  const { meta, update, clients, addClient, locked } = useNoteDetails();
+  const { meta, update, clients, addClient, locked, canAddClients } = useNoteDetails();
   const id = useId();
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
@@ -426,8 +443,12 @@ function ClientField() {
                 {c.name}
               </SelectItem>
             ))}
-            <SelectSeparator />
-            <SelectItem value={NEW_CLIENT}>+ New client…</SelectItem>
+            {canAddClients ? (
+              <>
+                <SelectSeparator />
+                <SelectItem value={NEW_CLIENT}>+ New client…</SelectItem>
+              </>
+            ) : null}
           </SelectContent>
         </Select>
       )}

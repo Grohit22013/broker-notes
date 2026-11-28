@@ -17,19 +17,32 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { createClientAction, updateClientAction, type ClientDto } from "@/lib/api/actions";
+import type { UserRefDto } from "@broker-notes/shared/dto";
+
+const NO_ADVISER = "__none__";
 
 type Props = {
   trigger: React.ReactNode;
   /** When given, the dialog edits this client; otherwise it creates a new one. */
   client?: ClientDto;
+  /** Active members who can be assigned as the client's adviser. */
+  advisers?: UserRefDto[];
 };
 
-export function ClientFormDialog({ trigger, client }: Props) {
+export function ClientFormDialog({ trigger, client, advisers = [] }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<{ field?: string; message: string } | null>(null);
+  const [adviserId, setAdviserId] = useState(client?.assignedAdviser?.id ?? NO_ADVISER);
 
   const submit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -38,6 +51,7 @@ export function ClientFormDialog({ trigger, client }: Props) {
       name: String(fd.get("name") ?? ""),
       email: String(fd.get("email") ?? ""),
       phone: String(fd.get("phone") ?? ""),
+      assignedAdviserId: adviserId === NO_ADVISER ? null : adviserId,
     };
     startTransition(async () => {
       const res = client
@@ -121,6 +135,25 @@ export function ClientFormDialog({ trigger, client }: Props) {
             />
             {fieldError("phone")}
           </div>
+          {advisers.length ? (
+            <div className="grid gap-2">
+              <Label htmlFor="client-adviser">Assigned adviser</Label>
+              <Select value={adviserId} onValueChange={setAdviserId}>
+                <SelectTrigger id="client-adviser" className="h-11 w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_ADVISER}>Not assigned</SelectItem>
+                  {advisers.map((a) => (
+                    <SelectItem key={a.id} value={a.id}>
+                      {a.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {fieldError("assignedAdviserId")}
+            </div>
+          ) : null}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Cancel

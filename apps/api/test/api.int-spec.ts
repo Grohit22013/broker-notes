@@ -29,7 +29,10 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await db.user.deleteMany({ where: { email: { endsWith: `@${DOMAIN}` } } });
+  // Deleting the brokerage cascades to its members, clients, notes and audit log.
+  await db.organisation.deleteMany({
+    where: { members: { some: { email: { endsWith: `@${DOMAIN}` } } } },
+  });
   await app.close();
 });
 

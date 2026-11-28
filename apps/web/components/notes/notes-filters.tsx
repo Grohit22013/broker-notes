@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { CalendarClock, Loader2, Search, SlidersHorizontal, X } from "lucide-react";
+import { CalendarClock, UserRoundPen, Loader2, Search, SlidersHorizontal, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -112,6 +112,19 @@ export function NotesFilters({ filters, tags, dueCount }: Props) {
     </>
   );
 
+  const mineToggle = (
+    <Button
+      type="button"
+      variant={filters.mine ? "default" : "outline"}
+      className="h-10 shrink-0 rounded-full"
+      aria-pressed={filters.mine}
+      onClick={() => apply({ mine: !filters.mine })}
+    >
+      <UserRoundPen className="size-4" aria-hidden />
+      Created by me
+    </Button>
+  );
+
   const dueToggle = (
     <Button
       type="button"
@@ -186,6 +199,7 @@ export function NotesFilters({ filters, tags, dueCount }: Props) {
       <div className="hidden flex-wrap items-end gap-2 md:flex">
         {renderSelects("desktop")}
         {dueToggle}
+        {mineToggle}
         {hasAnyFilter(filters) ? (
           <Button type="button" variant="ghost" className="h-10" onClick={clearAll}>
             Clear filters
@@ -196,6 +210,7 @@ export function NotesFilters({ filters, tags, dueCount }: Props) {
       {/* Mobile: quick toggle stays one tap away */}
       <div className="flex items-center gap-2 overflow-x-auto md:hidden">
         {dueToggle}
+        {mineToggle}
         {hasAnyFilter(filters) ? (
           <Button type="button" variant="ghost" className="h-10 shrink-0" onClick={clearAll}>
             Clear

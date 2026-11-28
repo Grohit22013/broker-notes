@@ -2,14 +2,14 @@ import { PrismaClient } from "@prisma/client";
 
 import { E2E_EMAIL_DOMAIN } from "./helpers";
 
-/** Removes every account (and, via cascade, every note) created by the E2E run. */
+/** Removes every brokerage (and, via cascade, its members and notes) created by the E2E run. */
 export default async function globalTeardown() {
   const db = new PrismaClient();
   try {
-    const { count } = await db.user.deleteMany({
-      where: { email: { endsWith: `@${E2E_EMAIL_DOMAIN}` } },
+    const { count } = await db.organisation.deleteMany({
+      where: { members: { some: { email: { endsWith: `@${E2E_EMAIL_DOMAIN}` } } } },
     });
-    console.warn(`[e2e] cleaned up ${count} test account(s)`);
+    console.warn(`[e2e] cleaned up ${count} test brokerage(s)`);
   } finally {
     await db.$disconnect();
   }

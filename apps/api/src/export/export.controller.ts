@@ -7,7 +7,8 @@ import { lvrOf } from "@broker-notes/shared/notes/key-figures";
 import { loanStage, noteTypeLabel } from "@broker-notes/shared/notes/taxonomy";
 import type { Response } from "express";
 
-import { CurrentUser, type SessionUser } from "../auth/auth.guard";
+import { AuditService } from "../audit/audit.service";
+import { AllowRoles, CurrentUser, type SessionUser } from "../auth/auth.guard";
 import { ClientsService } from "../clients/clients.service";
 import { SESSION_COOKIE } from "../config";
 import { NotesService } from "../notes/notes.service";
@@ -15,6 +16,7 @@ import { NotesService } from "../notes/notes.service";
 const NOTE_HEADERS = [
   "Title",
   "Client",
+  "Author",
   "Note type",
   "Loan stage",
   "Tags",
@@ -36,10 +38,12 @@ const NOTE_HEADERS = [
 @ApiTags("export")
 @ApiCookieAuth(SESSION_COOKIE)
 @Controller("export")
+@AllowRoles(["ADMIN", "ADVISER"], "Case managers can't export the brokerage's data.")
 export class ExportController {
   constructor(
     private readonly notes: NotesService,
     private readonly clients: ClientsService,
+    private readonly audit: AuditService,
   ) {}
 
   @Get("notes")
@@ -51,7 +55,7 @@ export class ExportController {
     @Query() query: Record<string, string>,
     @Res() res: Response,
   ) {
-    const rows = await this.notes.exportRows(user.id, parseNoteFilters(query));
+    const rows = await this.notes.exportRows(user, parseNoteFilters(query));
     const csv = toCsv(
       NOTE_HEADERS,
       rows.map((n) => {
@@ -59,6 +63,7 @@ export class ExportController {
         return [
           n.title || "Untitled note",
           n.client?.name ?? "",
+          n.user.name,
           noteTypeLabel(n.noteType),
           n.loanStage ? loanStage(n.loanStage).label : "",
           n.tags.join("; "),
@@ -77,6 +82,12 @@ export class ExportController {
         ];
       }),
     );
+    await this.audit.record(user, {
+      action: "export.notes",
+      summary: `Exported ${rows.length} note${rows.length === 1 ? "" : "s"} to CSV`,
+      entityType: "export",
+      metadata: { count: rows.length },
+    });
     this.send(res, csv, csvFilename("notes"));
   }
 
@@ -85,17 +96,24 @@ export class ExportController {
   @ApiProduces("text/csv")
   @ApiOperation({ summary: "Clients as CSV (columns match what the importer recognises)" })
   async clientsCsv(@CurrentUser() user: SessionUser, @Res() res: Response) {
-    const clients = await this.clients.list(user.id);
+    const clients = await this.clients.list(user.organisationId);
     const csv = toCsv(
-      ["Name", "Email", "Phone", "Notes", "Last note"],
+      ["Name", "Email", "Phone", "Assigned adviser", "Notes", "Last note"],
       clients.map((c) => [
         c.name,
         c.email ?? "",
         c.phone ?? "",
+        c.assignedAdviser?.name ?? "",
         c.noteCount,
         c.lastNoteAt ? toIsoDateTime(new Date(c.lastNoteAt)) : "",
       ]),
     );
+    await this.audit.record(user, {
+      action: "export.clients",
+      summary: `Exported ${clients.length} client${clients.length === 1 ? "" : "s"} to CSV`,
+      entityType: "export",
+      metadata: { count: clients.length },
+    });
     this.send(res, csv, csvFilename("clients"));
   }
 

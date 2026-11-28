@@ -15,7 +15,7 @@ export type AuthFormState<T> = {
   error?: string;
   fieldErrors?: FieldErrors<T>;
   /** Echoed back so the form keeps what the user typed (never the password). */
-  values?: { name?: string; email?: string };
+  values?: { name?: string; email?: string; organisationName?: string };
 };
 
 const str = (v: FormDataEntryValue | null) => (typeof v === "string" ? v : "");
@@ -35,8 +35,10 @@ export async function registerAction(
     email: str(formData.get("email")),
     password: str(formData.get("password")),
     confirmPassword: str(formData.get("confirmPassword")),
+    organisationName: str(formData.get("organisationName")),
+    inviteToken: str(formData.get("inviteToken")),
   };
-  const values = { name: raw.name, email: raw.email };
+  const values = { name: raw.name, email: raw.email, organisationName: raw.organisationName };
   // Same schema as the API: every field's error at once, without a round-trip.
   const { registerSchema, toFieldErrors } = await schemas();
   const parsed = registerSchema.safeParse(raw);

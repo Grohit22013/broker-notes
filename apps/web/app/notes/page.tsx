@@ -16,6 +16,7 @@ import {
   parseNoteFilters,
 } from "@broker-notes/shared/notes/filters";
 import { getNoteFacets, listNotes } from "@/lib/api/queries";
+import { canExport } from "@broker-notes/shared/orgs/roles";
 import { toNoteCardData } from "@/lib/notes/view";
 
 export const metadata: Metadata = { title: "Notes" };
@@ -24,7 +25,7 @@ type Props = { searchParams: Promise<Record<string, string | string[] | undefine
 
 export default async function NotesPage({ searchParams }: Props) {
   // Defence in depth: middleware already guards this route.
-  await requireUser();
+  const user = await requireUser();
   const filters = parseNoteFilters(await searchParams);
   const [notes, facets, client] = await Promise.all([
     listNotes(filters),
@@ -38,7 +39,10 @@ export default async function NotesPage({ searchParams }: Props) {
   if (facets.total === 0) {
     return (
       <div className="container-page">
-        <PageHeader title="Notes" description="Your client file notes will appear here." />
+        <PageHeader
+          title="Notes"
+          description={`File notes for ${user.organisationName || "your brokerage"} will appear here.`}
+        />
         <EmptyState
           icon={FileText}
           title="No notes yet"
@@ -60,12 +64,14 @@ export default async function NotesPage({ searchParams }: Props) {
         description={`${facets.total} ${facets.total === 1 ? "note" : "notes"} · pinned first`}
         actions={
           <>
-            <Button asChild variant="outline" className="h-10">
-              <a href={`/api/export/notes${exportQuery ? `?${exportQuery}` : ""}`} download>
-                <Download className="size-4" aria-hidden />
-                {filtering ? "Export filtered (CSV)" : "Export CSV"}
-              </a>
-            </Button>
+            {canExport(user) ? (
+              <Button asChild variant="outline" className="h-10">
+                <a href={`/api/export/notes${exportQuery ? `?${exportQuery}` : ""}`} download>
+                  <Download className="size-4" aria-hidden />
+                  {filtering ? "Export filtered (CSV)" : "Export CSV"}
+                </a>
+              </Button>
+            ) : null}
             {/* On phones the bottom nav already has “New”. */}
             <div className="hidden md:block">
               <NewNoteButton />
@@ -100,7 +106,7 @@ export default async function NotesPage({ searchParams }: Props) {
         <EmptyState
           icon={SearchX}
           title="No notes match"
-          description="Try a different search, or clear the filters to see all your notes."
+          description="Try a different search, or clear the filters to see all of your brokerage's notes."
           action={
             <Button asChild variant="outline">
               <Link href="/notes">Clear filters</Link>
@@ -110,7 +116,7 @@ export default async function NotesPage({ searchParams }: Props) {
       ) : (
         <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {notes.map((n) => (
-            <NoteCard key={n.id} query={filters.q} note={toNoteCardData(n)} />
+            <NoteCard key={n.id} query={filters.q} note={toNoteCardData(n, user)} />
           ))}
         </ul>
       )}
