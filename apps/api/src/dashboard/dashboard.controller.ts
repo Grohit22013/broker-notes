@@ -2,13 +2,15 @@ import { Controller, Get, Injectable } from "@nestjs/common";
 import { ApiCookieAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import type { Prisma } from "@prisma/client";
 import { CASE_STAGES, OPEN_CASE_STAGES } from "@broker-notes/shared/cases/taxonomy";
-import { startOfNextZonedDay } from "@broker-notes/shared/dates";
+import { OPEN_TASK_STATUSES } from "@broker-notes/shared/tasks/taxonomy";
+import { startOfNextZonedDay, startOfZonedDay } from "@broker-notes/shared/dates";
 import type { DashboardDto } from "@broker-notes/shared/dto";
 
 import { CurrentUser, type SessionUser } from "../auth/auth.guard";
 import { SESSION_COOKIE } from "../config";
 import { listSelect, toListItem } from "../notes/notes.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { taskSelect, toTaskDto } from "../tasks/tasks.service";
 
 const DAY_MS = 86_400_000;
 
@@ -22,6 +24,11 @@ export class DashboardService {
     const notes: Prisma.NoteWhereInput = { organisationId: org, deletedAt: null };
     const dueBy = startOfNextZonedDay(now);
     const open = { organisationId: org, stage: { in: OPEN_CASE_STAGES } };
+    const myOpenTasks: Prisma.TaskWhereInput = {
+      organisationId: org,
+      assigneeId: actor.id,
+      status: { in: OPEN_TASK_STATUSES },
+    };
 
     const [
       notesTotal,
@@ -34,6 +41,9 @@ export class DashboardService {
       followUps,
       stages,
       latest,
+      taskCount,
+      overdueTasks,
+      tasks,
     ] = await Promise.all([
       this.db.note.count({ where: notes }),
       this.db.note.count({ where: { ...notes, userId: actor.id } }),
@@ -77,11 +87,28 @@ export class DashboardService {
           },
         },
       }),
+      this.db.task.count({ where: myOpenTasks }),
+      this.db.task.count({ where: { ...myOpenTasks, dueAt: { lt: startOfZonedDay(now) } } }),
+      this.db.task.findMany({
+        where: myOpenTasks,
+        orderBy: [{ dueAt: { sort: "asc", nulls: "last" } }, { priority: "desc" }],
+        take: 6,
+        select: taskSelect,
+      }),
     ]);
 
     const byStage = new Map(stages.map((s) => [s.stage, s._count._all]));
     return {
-      counts: { notes: notesTotal, myNotes, followUpsDue: due, openCases, myOpenCases },
+      counts: {
+        notes: notesTotal,
+        myNotes,
+        followUpsDue: due,
+        openCases,
+        myOpenCases,
+        myOpenTasks: taskCount,
+        myOverdueTasks: overdueTasks,
+      },
+      myTasks: tasks.map((t) => toTaskDto(t, actor)),
       pinned: pinned.map(toListItem),
       recent: recent.map(toListItem),
       followUps: followUps.map(toListItem),
