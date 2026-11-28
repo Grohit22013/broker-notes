@@ -54,7 +54,7 @@ export class NotesController {
   @ApiOperation({
     summary: "List the brokerage's notes",
     description:
-      "Query: q, stage, type, tag, client, due=1, mine=1, sort=updated|created|followup|title. Pinned first.",
+      "Query: q, stage, type, tag, client, case, due=1, mine=1, sort=updated|created|followup|title. Pinned first.",
   })
   async list(
     @CurrentUser() user: SessionUser,
@@ -76,7 +76,7 @@ export class NotesController {
     @CurrentUser() user: SessionUser,
     @Body(new ZodPipe(createBody)) body: z.output<typeof createBody>,
   ): Promise<CreatedNoteDto> {
-    return this.notes.create(user, body.templateId, body.clientId);
+    return this.notes.create(user, body.templateId, body.clientId, body.caseId);
   }
 
   @Get(":id")

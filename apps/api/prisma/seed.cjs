@@ -11,6 +11,7 @@ const { PrismaClient } = require("@prisma/client");
 const bcrypt = require("bcryptjs");
 const { noteFromTemplate } = require("@broker-notes/shared/notes/templates");
 const { zonedMidnight, zonedYmd } = require("@broker-notes/shared/dates");
+const { formatCaseReference, caseStage } = require("@broker-notes/shared/cases/taxonomy");
 
 const EMAIL = (process.env.SEED_EMAIL || "demo@brokernotes.dev").toLowerCase();
 const PASSWORD = process.env.SEED_PASSWORD || "demo1234";
@@ -106,10 +107,90 @@ async function main() {
   const smith = await client("Chloe Smith", "chloe.smith@example.com", "0422 333 444", user.id);
   const obrien = await client("Liam O’Brien", "liam@example.com", null, user.id);
 
-  /** @type {Array<{client: any, author?: any, template?: string, title?: string, type?: string, stage: string|null, tags: string[], pinned?: boolean, followUp?: Date, kf?: object, body: object, hours: number, finalise?: string[]}>} */
+  // Mortgage cases: one per deal, at different points in the pipeline.
+  let caseSeq = 0;
+  const mortgageCase = async (forClient, type, stage, extra, adviserId, openedHoursAgo) => {
+    const reference = formatCaseReference(today.year, ++caseSeq);
+    const c = await db.mortgageCase.create({
+      data: {
+        organisationId: org.id,
+        clientId: forClient.id,
+        reference,
+        type,
+        stage,
+        assignedAdviserId: adviserId,
+        createdById: user.id,
+        createdAt: hoursAgo(openedHoursAgo),
+        stageChangedAt: hoursAgo(Math.max(1, openedHoursAgo - 24)),
+        updatedAt: hoursAgo(Math.max(1, openedHoursAgo - 24)),
+        ...extra,
+      },
+    });
+    const ref = { entityType: "case", entityId: c.id };
+    await audit(
+      user,
+      "case.created",
+      `Opened case ${reference} for ${forClient.name}`,
+      openedHoursAgo,
+      ref,
+    );
+    if (stage !== "ENQUIRY") {
+      await audit(
+        user,
+        "case.stage_changed",
+        `Moved ${reference} from Enquiry to ${caseStage(stage).label}`,
+        Math.max(1, openedHoursAgo - 24),
+        ref,
+      );
+    }
+    return c;
+  };
+  const nguyenPurchase = await mortgageCase(
+    nguyen,
+    "FIRST_HOME",
+    "FACT_FIND",
+    { loanAmount: 680000, propertyValue: 850000 },
+    adviser.id,
+    30,
+  );
+  const patelInvestment = await mortgageCase(
+    patel,
+    "INVESTMENT",
+    "ASSESSMENT",
+    { loanAmount: 920000, propertyValue: 1150000, lender: "ANZ", lenderReference: "ANZ-7781203" },
+    adviser.id,
+    260,
+  );
+  const smithPurchase = await mortgageCase(
+    smith,
+    "PURCHASE",
+    "LODGED",
+    { loanAmount: 540000, propertyValue: 640000, lender: "NAB", lenderReference: "NAB-55102" },
+    user.id,
+    220,
+  );
+  const obrienPurchase = await mortgageCase(
+    obrien,
+    "FIRST_HOME",
+    "SETTLED",
+    { loanAmount: 495000, propertyValue: 610000, lender: "Macquarie" },
+    user.id,
+    380,
+  );
+  const nguyenRefi = await mortgageCase(
+    nguyen,
+    "REFINANCE",
+    "RESEARCH",
+    { loanAmount: 412000, lender: "Westpac" },
+    adviser.id,
+    125,
+  );
+
+  /** @type {Array<{client: any, case?: any, author?: any, template?: string, title?: string, type?: string, stage: string|null, tags: string[], pinned?: boolean, followUp?: Date, kf?: object, body: object, hours: number, finalise?: string[]}>} */
   const notes = [
     {
       client: nguyen,
+      case: nguyenPurchase,
       author: adviser,
       template: "discovery",
       stage: "LEAD",
@@ -140,6 +221,7 @@ async function main() {
     },
     {
       client: patel,
+      case: patelInvestment,
       author: caseManager,
       template: "conditions",
       stage: "CONDITIONAL",
@@ -160,6 +242,7 @@ async function main() {
     },
     {
       client: smith,
+      case: smithPurchase,
       template: "lender-rationale",
       stage: "APPLICATION",
       tags: ["best-interests"],
@@ -192,6 +275,7 @@ async function main() {
     },
     {
       client: obrien,
+      case: obrienPurchase,
       template: "settlement",
       stage: "SETTLED",
       tags: ["first-home"],
@@ -214,6 +298,7 @@ async function main() {
     },
     {
       client: nguyen,
+      case: nguyenRefi,
       author: adviser,
       template: "review",
       stage: "REVIEW",
@@ -231,6 +316,7 @@ async function main() {
     },
     {
       client: smith,
+      case: smithPurchase,
       template: "fact-find",
       stage: "PRE_APPROVAL",
       tags: ["self-employed"],
@@ -256,6 +342,7 @@ async function main() {
         organisationId: org.id,
         userId: author.id,
         clientId: n.client.id,
+        caseId: n.case?.id ?? null,
         title: tpl.title,
         noteType: tpl.noteType,
         contentJson: n.body,
@@ -292,7 +379,7 @@ async function main() {
   const source = process.env.SEED_PASSWORD ? "SEED_PASSWORD" : "the documented demo default";
   console.log(
     `Seeded “Harbour Home Loans”: ${EMAIL} (admin), ${ADVISER_EMAIL}, ${CM_EMAIL} ` +
-      `(password from ${source}) — 4 clients, ${notes.length} notes.`,
+      `(password from ${source}) — 4 clients, ${caseSeq} cases, ${notes.length} notes.`,
   );
 }
 
