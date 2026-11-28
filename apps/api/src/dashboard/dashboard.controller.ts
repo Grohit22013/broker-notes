@@ -109,9 +109,9 @@ export class DashboardService {
         myOverdueTasks: overdueTasks,
       },
       myTasks: tasks.map((t) => toTaskDto(t, actor)),
-      pinned: pinned.map(toListItem),
-      recent: recent.map(toListItem),
-      followUps: followUps.map(toListItem),
+      pinned: pinned.map((r) => toListItem(r, actor.id)),
+      recent: recent.map((r) => toListItem(r, actor.id)),
+      followUps: followUps.map((r) => toListItem(r, actor.id)),
       pipeline: CASE_STAGES.filter((s) => (OPEN_CASE_STAGES as string[]).includes(s.value)).map(
         (s) => ({ stage: s.value, count: byStage.get(s.value) ?? 0 }),
       ),

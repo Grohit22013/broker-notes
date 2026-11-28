@@ -444,6 +444,35 @@ async function main() {
     },
   );
 
+  // A brokerage template (saved from a note) and a starred note, so Phase 11 shows in the demo.
+  const template = await db.orgTemplate.create({
+    data: {
+      organisationId: org.id,
+      name: "Valuation chase",
+      description: "Our checklist when the lender orders a valuation",
+      noteType: "CONDITIONS",
+      title: "Valuation chase – {client}",
+      contentJson: doc(
+        h2("Valuation"),
+        bullets(["Valuer / panel:", "Ordered on:", "Access contact:"]),
+        h2("To chase"),
+        tasks([
+          ["Confirm access with the selling agent", false],
+          ["Send valuation report to the client", false],
+        ]),
+      ),
+      createdById: user.id,
+      createdAt: hoursAgo(48),
+    },
+  });
+  await audit(user, "template.created", `Saved the template “${template.name}”`, 48, {
+    entityType: "template",
+    entityId: template.id,
+  });
+  await db.noteFavourite.create({
+    data: { userId: user.id, noteId: noteByTemplate["lender-rationale"].id },
+  });
+
   await audit(user, "export.clients", "Exported 4 clients to CSV", 20, {
     entityType: "export",
     metadata: { count: 4 },

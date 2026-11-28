@@ -87,7 +87,12 @@ export class NotesController {
   }
 
   @Put(":id/content")
-  @ApiOperation({ summary: "Autosave title + body (409 if finalised)" })
+  @ApiOperation({
+    summary: "Autosave title + body",
+    description:
+      "Send baseRevision (from GET /notes/:id or the last save). 409 code NOTE_CONFLICT (with the " +
+      "latest version) if the note changed since; 409 if finalised.",
+  })
   @ZodBody(contentBody)
   saveContent(
     @CurrentUser() user: SessionUser,
@@ -152,6 +157,20 @@ export class NotesController {
     @Param("versionId", idPipe) versionId: string,
   ): Promise<VersionDetailDto> {
     return this.notes.version(user, id, versionId);
+  }
+
+  @Put(":id/favourite")
+  @HttpCode(204)
+  @ApiOperation({ summary: "Star the note (personal to the signed-in member)" })
+  favourite(@CurrentUser() user: SessionUser, @Param("id", idPipe) id: string): Promise<void> {
+    return this.notes.setFavourite(user, id, true);
+  }
+
+  @Delete(":id/favourite")
+  @HttpCode(204)
+  @ApiOperation({ summary: "Unstar the note" })
+  unfavourite(@CurrentUser() user: SessionUser, @Param("id", idPipe) id: string): Promise<void> {
+    return this.notes.setFavourite(user, id, false);
   }
 
   @Delete(":id")

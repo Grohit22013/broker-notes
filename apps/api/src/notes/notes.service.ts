@@ -32,7 +32,7 @@ import {
 import { canEditContent, lockedFieldIn } from "@broker-notes/shared/notes/finalise";
 import { clean, parseKeyFigures } from "@broker-notes/shared/notes/key-figures";
 import { noteFromTemplate } from "@broker-notes/shared/notes/templates";
-import type { z } from "zod";
+import { z } from "zod";
 import type { updateNoteMetaSchema, updateNoteSchema } from "@broker-notes/shared/notes/validation";
 import { jsonEqual, shouldSnapshot } from "@broker-notes/shared/notes/versioning";
 import { canEditNote } from "@broker-notes/shared/orgs/roles";
@@ -40,6 +40,7 @@ import { canEditNote } from "@broker-notes/shared/orgs/roles";
 import { AuditService } from "../audit/audit.service";
 import type { SessionUser } from "../auth/auth.guard";
 import { PrismaService } from "../prisma/prisma.service";
+import { TemplatesService } from "../templates/templates.service";
 
 const LIST_LIMIT = 200;
 const EXPORT_LIMIT = 5000;
@@ -62,11 +63,13 @@ export const listSelect = {
   client: { select: { id: true, name: true } },
   user: { select: { id: true, name: true } },
   case: { select: { id: true, reference: true } },
+  favourites: { select: { userId: true } },
 } satisfies Prisma.NoteSelect;
 
 type ListRow = Prisma.NoteGetPayload<{ select: typeof listSelect }>;
 
-export function toListItem(r: ListRow): NoteListItemDto {
+/** List item as seen by `viewerId` (favourites are personal). */
+export function toListItem(r: ListRow, viewerId: string): NoteListItemDto {
   return {
     id: r.id,
     title: r.title,
@@ -83,6 +86,7 @@ export function toListItem(r: ListRow): NoteListItemDto {
     client: r.client,
     author: r.user,
     case: r.case,
+    favourite: r.favourites.some((f) => f.userId === viewerId),
   };
 }
 
@@ -101,6 +105,7 @@ export class NotesService {
   constructor(
     private readonly db: PrismaService,
     private readonly audit: AuditService,
+    private readonly templates: TemplatesService,
   ) {}
 
   /**
@@ -115,6 +120,8 @@ export class NotesService {
         title: true,
         status: true,
         contentJson: true,
+        revision: true,
+        updatedAt: true,
         versions: { orderBy: { createdAt: "desc" }, take: 1, select: { createdAt: true } },
         case: { select: { clientId: true } },
       },
@@ -135,7 +142,7 @@ export class NotesService {
       select: listSelect,
       take: LIST_LIMIT,
     });
-    return rows.map(toListItem);
+    return rows.map((r) => toListItem(r, actor.id));
   }
 
   async facets(actor: SessionUser, now = new Date()): Promise<NoteFacetsDto> {
@@ -160,6 +167,7 @@ export class NotesService {
       select: {
         ...listSelect,
         contentJson: true,
+        revision: true,
         finalisedAt: true,
         amendments: {
           orderBy: { createdAt: "asc" },
@@ -169,7 +177,8 @@ export class NotesService {
     });
     if (!note) throw new NotFoundException("Note not found");
     return {
-      ...toListItem(note),
+      ...toListItem(note, actor.id),
+      revision: note.revision,
       contentJson: isDocJson(note.contentJson) ? note.contentJson : EMPTY_DOC,
       finalisedAt: note.finalisedAt?.toISOString() ?? null,
       amendments: note.amendments.map((a) => ({ ...a, createdAt: a.createdAt.toISOString() })),
@@ -198,7 +207,14 @@ export class NotesService {
         })
       : null;
     if (clientId && !client) throw new NotFoundException("Client not found");
-    const { contentJson, noteType, title } = noteFromTemplate(templateId, client?.name);
+    // A cuid is one of the brokerage's own templates; anything else is a built-in id.
+    const fromOrg = z.cuid().safeParse(templateId).success
+      ? await this.templates.noteFrom(actor.organisationId, templateId, client?.name)
+      : null;
+    if (z.cuid().safeParse(templateId).success && !fromOrg) {
+      throw new NotFoundException("Template not found");
+    }
+    const { contentJson, noteType, title } = fromOrg ?? noteFromTemplate(templateId, client?.name);
     return this.db.$transaction(async (tx) => {
       const note = await tx.note.create({
         data: {
@@ -230,16 +246,36 @@ export class NotesService {
 
   /** Autosave. Snapshots the *previous* state at most once per window (see versioning.ts). */
   async saveContent(actor: SessionUser, id: string, input: SaveInput): Promise<SavedNoteDto> {
-    const { title, contentJson, contentText } = input;
+    const { title, contentJson, contentText, baseRevision } = input;
     const updated = await this.db.$transaction(async (tx) => {
       const existing = await this.editable(tx, actor, id);
       if (!canEditContent(existing.status)) throw new ConflictException(FINALISED_MESSAGE);
 
       const changed = existing.title !== title || !jsonEqual(existing.contentJson, contentJson);
-      const saved = await tx.note.update({
+      // Conditional on the revision the edits were based on: if anyone saved in between, nothing
+      // is written and the caller gets the latest version to decide what to keep.
+      const { count } = await tx.note.updateMany({
+        where: { id, ...(baseRevision !== undefined ? { revision: baseRevision } : {}) },
+        data: { title, contentJson, contentText, revision: { increment: 1 } },
+      });
+      if (count === 0) {
+        throw new ConflictException({
+          message:
+            "This note was changed in another tab or by a colleague since you opened it. " +
+            "Choose which version to keep.",
+          code: "NOTE_CONFLICT",
+          latest: {
+            revision: existing.revision,
+            title: existing.title,
+            contentJson: isDocJson(existing.contentJson) ? existing.contentJson : EMPTY_DOC,
+            updatedAt: existing.updatedAt.toISOString(),
+            updatedBy: null,
+          },
+        });
+      }
+      const saved = await tx.note.findUniqueOrThrow({
         where: { id },
-        data: { title, contentJson, contentText },
-        select: { updatedAt: true },
+        select: { updatedAt: true, revision: true },
       });
       if (
         shouldSnapshot({
@@ -258,7 +294,21 @@ export class NotesService {
       }
       return saved;
     });
-    return { updatedAt: updated.updatedAt.toISOString() };
+    return { updatedAt: updated.updatedAt.toISOString(), revision: updated.revision };
+  }
+
+  /** Stars or unstars a note for the signed-in member (any member who can read it). */
+  async setFavourite(actor: SessionUser, id: string, favourite: boolean): Promise<void> {
+    await this.assertVisible(actor, id);
+    if (favourite) {
+      await this.db.noteFavourite.upsert({
+        where: { userId_noteId: { userId: actor.id, noteId: id } },
+        create: { userId: actor.id, noteId: id },
+        update: {},
+      });
+    } else {
+      await this.db.noteFavourite.deleteMany({ where: { userId: actor.id, noteId: id } });
+    }
   }
 
   /** Details update. On finalised notes only workflow fields may change (server-enforced). */
