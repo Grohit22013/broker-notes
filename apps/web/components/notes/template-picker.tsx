@@ -26,12 +26,14 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useCreateNoteAction } from "@/hooks/use-create-note";
 import { removeTemplateAction } from "@/lib/api/note-extras-actions";
+import { ClientFormDialog } from "@/components/clients/client-form-dialog";
 
 export type TemplateCard = { id: string; name: string; description: string };
 
@@ -48,6 +50,7 @@ const ICONS: Record<string, LucideIcon> = {
 };
 
 const NO_CLIENT = "none";
+const ADD_CLIENT = "__add__";
 
 export function TemplatePicker({
   templates,
@@ -55,6 +58,7 @@ export function TemplatePicker({
   defaultClientId,
   forCase,
   orgTemplates = [],
+  canAddClients = false,
 }: {
   templates: TemplateCard[];
   clients: { id: string; name: string }[];
@@ -63,28 +67,54 @@ export function TemplatePicker({
   forCase?: { id: string; reference: string };
   /** The brokerage's own templates (saved from notes). */
   orgTemplates?: (TemplateCard & { canRemove: boolean; createdBy: string })[];
+  /** Admins and advisers can add a client without leaving this page. */
+  canAddClients?: boolean;
 }) {
   const [clientId, setClientId] = useState(defaultClientId ?? NO_CLIENT);
+  const [clientList, setClientList] = useState(clients);
+  const [adding, setAdding] = useState(false);
   const createNote = useCreateNoteAction();
 
   return (
     <div className="space-y-6">
-      {clients.length ? (
+      {clientList.length || canAddClients ? (
         <div className="grid max-w-sm gap-2">
           <Label htmlFor="new-note-client">For client (optional)</Label>
-          <Select value={clientId} onValueChange={setClientId} disabled={Boolean(forCase)}>
+          <Select
+            value={clientId}
+            onValueChange={(v) => (v === ADD_CLIENT ? setAdding(true) : setClientId(v))}
+            disabled={Boolean(forCase)}
+          >
             <SelectTrigger id="new-note-client" className="h-11 w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value={NO_CLIENT}>No client</SelectItem>
-              {clients.map((c) => (
+              {clientList.map((c) => (
                 <SelectItem key={c.id} value={c.id}>
                   {c.name}
                 </SelectItem>
               ))}
+              {canAddClients ? (
+                <>
+                  <SelectSeparator />
+                  <SelectItem value={ADD_CLIENT}>+ Add client…</SelectItem>
+                </>
+              ) : null}
             </SelectContent>
           </Select>
+          {canAddClients ? (
+            <ClientFormDialog
+              open={adding}
+              onOpenChange={setAdding}
+              onCreated={(c) => {
+                setClientList((list) =>
+                  [...list, c].sort((a, b) => a.name.localeCompare(b.name, "en-AU")),
+                );
+                setClientId(c.id);
+              }}
+            />
+          ) : null}
           {forCase ? (
             <p className="text-muted-foreground text-sm">
               For case{" "}

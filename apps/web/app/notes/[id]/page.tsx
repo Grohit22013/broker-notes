@@ -5,7 +5,7 @@ import { NoteDetailsProvider } from "@/components/notes/note-details";
 import { NoteWorkspace } from "@/components/notes/note-workspace";
 import { getCurrentUser, requireUser } from "@/lib/auth/session";
 import { clientOptions } from "@/lib/api/queries";
-import { toIsoDate } from "@broker-notes/shared/dates";
+import { toIsoDate, toLocalDateTime } from "@broker-notes/shared/dates";
 import { displayTitle } from "@broker-notes/shared/notes/content";
 import { activeMembers, getNote, getNoteFacets, listTasks } from "@/lib/api/queries";
 import { canEditNote, canManageClients } from "@broker-notes/shared/orgs/roles";
@@ -45,6 +45,7 @@ export default async function NotePage({ params }: Props) {
         loanStage: note.loanStage,
         tags: note.tags,
         followUpDate: note.followUpAt ? toIsoDate(new Date(note.followUpAt)) : null,
+        meetingAt: note.meetingAt ? toLocalDateTime(new Date(note.meetingAt)) : null,
         pinned: note.pinned,
         clientId: note.client?.id ?? null,
         clientName: note.client?.name ?? null,

@@ -8,8 +8,10 @@ import {
 import { Prisma } from "@prisma/client";
 import {
   parseIsoDate,
+  parseLocalDateTime,
   startOfNextZonedDay,
   toIsoDate,
+  toLocalDateTime,
   zonedMidnight,
 } from "@broker-notes/shared/dates";
 import type {
@@ -57,6 +59,7 @@ export const listSelect = {
   loanStage: true,
   tags: true,
   followUpAt: true,
+  meetingAt: true,
   pinned: true,
   status: true,
   keyFigures: true,
@@ -80,6 +83,7 @@ export function toListItem(r: ListRow, viewerId: string): NoteListItemDto {
     loanStage: r.loanStage,
     tags: r.tags,
     followUpAt: r.followUpAt?.toISOString() ?? null,
+    meetingAt: r.meetingAt?.toISOString() ?? null,
     pinned: r.pinned,
     status: r.status,
     keyFigures: parseKeyFigures(r.keyFigures),
@@ -224,6 +228,8 @@ export class NotesService {
           contentJson,
           noteType,
           clientId: client?.id ?? null,
+          // A client-meeting note starts with "now" (to the quarter hour) as the meeting time.
+          meetingAt: templateId === "client-meeting" ? quarterHour(new Date()) : null,
           caseId: linkedCase?.id ?? null,
           versions: { create: { title, contentJson } },
         },
@@ -318,7 +324,7 @@ export class NotesService {
     const provided = Object.keys(input).filter((k) => input[k as keyof MetaInput] !== undefined);
     if (lockedFieldIn(current.status, provided)) throw new ConflictException(FINALISED_MESSAGE);
 
-    const { followUpDate, keyFigures, clientId, caseId, ...rest } = input;
+    const { followUpDate, meetingAt, keyFigures, clientId, caseId, ...rest } = input;
     if (clientId) {
       const owns = await this.db.client.count({
         where: { id: clientId, organisationId: actor.organisationId },
@@ -327,6 +333,9 @@ export class NotesService {
     }
 
     const data: Prisma.NoteUncheckedUpdateManyInput = { ...rest };
+    if (meetingAt !== undefined) {
+      data.meetingAt = meetingAt === null ? null : parseLocalDateTime(meetingAt);
+    }
     if (followUpDate !== undefined) {
       const ymd = followUpDate === null ? null : parseIsoDate(followUpDate);
       data.followUpAt = ymd ? zonedMidnight(ymd) : null;
@@ -382,6 +391,7 @@ export class NotesService {
         loanStage: true,
         tags: true,
         followUpAt: true,
+        meetingAt: true,
         pinned: true,
         status: true,
         keyFigures: true,
@@ -395,6 +405,7 @@ export class NotesService {
       loanStage: n.loanStage,
       tags: n.tags,
       followUpDate: n.followUpAt ? toIsoDate(n.followUpAt) : null,
+      meetingAt: n.meetingAt ? toLocalDateTime(n.meetingAt) : null,
       pinned: n.pinned,
       clientId: n.client?.id ?? null,
       clientName: n.client?.name ?? null,
@@ -550,6 +561,9 @@ export class NotesService {
     if (!n) throw new NotFoundException("Note not found");
   }
 }
+
+/** Rounds down to the quarter hour (meeting times read better as 10:15 than 10:17). */
+const quarterHour = (d: Date) => new Date(Math.floor(d.getTime() / 900_000) * 900_000);
 
 const scopeOf = (actor: SessionUser) => ({
   organisationId: actor.organisationId,

@@ -54,6 +54,8 @@ export type NoteMetaFieldsDto = {
   loanStage: LoanStageValue | null;
   tags: string[];
   followUpAt: string | null;
+  /** When the meeting this note records took place (ISO), if any. */
+  meetingAt: string | null;
   pinned: boolean;
   status: NoteStatusValue;
   keyFigures: KeyFigures;
@@ -93,6 +95,7 @@ export type NoteMetaDto = {
   loanStage: LoanStageValue | null;
   tags: string[];
   followUpDate: string | null; // "YYYY-MM-DD", Australia/Sydney
+  meetingAt: string | null; // "YYYY-MM-DDTHH:mm", Australia/Sydney
   pinned: boolean;
   clientId: string | null;
   clientName: string | null;
@@ -301,3 +304,23 @@ export type OrgTemplateDto = {
   /** Creator or admin may remove it. */
   canRemove: boolean;
 };
+
+// ── Calendar (Phase 12) ──────────────────────────────────────────────────────
+
+export type CalendarItemKind = "meeting" | "follow_up" | "task";
+
+export type CalendarItemDto = {
+  kind: CalendarItemKind;
+  /** "YYYY-MM-DD" in the brokerage's time zone. */
+  date: string;
+  /** "HH:mm" for meetings; null for all-day items. */
+  time: string | null;
+  title: string;
+  /** Where the item links to. */
+  href: string;
+  clientName: string | null;
+  /** Follow-ups and tasks that are past due and still open. */
+  overdue: boolean;
+};
+
+export type CalendarDto = { from: string; to: string; items: CalendarItemDto[] };

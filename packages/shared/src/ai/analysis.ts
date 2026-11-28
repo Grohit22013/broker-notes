@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { parseIsoDate } from "../dates";
 import { parseMoney, parseRate } from "../money";
 import type { KeyFigures } from "../notes/figures";
 
@@ -7,8 +8,8 @@ import { AI_MAX_INPUT_CHARS } from "./config";
 
 /**
  * Prompt + response handling for the single "Analyse note" call. One request returns everything
- * (summary, action items, key figures, Best Interests check) — four separate calls would cost
- * four times as much free-tier quota for the same result.
+ * (summary, action items, key figures, Best Interests check, dates) — separate calls would cost
+ * several times as much free-tier quota for the same result.
  */
 
 export const SYSTEM_PROMPT = `You are an assistant for an Australian mortgage broker. You read one client file note and return ONLY a JSON object (no markdown, no commentary) with exactly these keys:
@@ -26,13 +27,22 @@ export const SYSTEM_PROMPT = `You are an assistant for an Australian mortgage br
   "bestInterests": {
     "status": "ok" | "needs_attention",
     "issues": [ string ]             // gaps against ASIC RG 273 Best Interests Duty, max 5
-  }
+  },
+  "dates": [                         // dates the note mentions that the broker should act on, max 6
+    {
+      "kind": "meeting" | "follow_up" | "deadline",   // meeting = an appointment with the client/lender; follow_up = when to call back or check in; deadline = something due (documents, conditions, settlement)
+      "date": string,                // YYYY-MM-DD, resolved using "Today" below (e.g. "next Tuesday")
+      "time": string | null,         // HH:mm 24-hour if stated, else null
+      "label": string                // short, e.g. "Call Asha re payslips", "Valuation report due"
+    }
+  ]
 }
 
 Rules:
 - Use only information in the note. Never invent figures, names or dates; use null when unknown.
 - Amounts like "$850k" or "1.2m" become numbers (850000, 1200000).
 - For bestInterests, check whether the note records: the client's requirements and objectives, the options/lenders considered and compared (costs, rates, fees), why the recommended product suits the client, and why cheaper or alternative options were not recommended. Flag generic boilerplate. If the note is not about a recommendation (e.g. a first discovery call), say what will need to be recorded later and use "needs_attention" only if something important is missing for its stage.
+- For dates: only include dates the note actually states or clearly implies ("next Tuesday", "end of the month", "in two weeks"); resolve them against Today; never guess. Past dates that are only history (e.g. "settled 14 Nov") are not actions — leave them out. Use [] when there are none.
 - Text like "[TFN removed]" marks redacted personal identifiers — ignore them.
 - Write in Australian English.`;
 
@@ -41,15 +51,19 @@ export function buildUserPrompt({
   text,
   noteType,
   loanStage,
+  today,
 }: {
   title: string;
   text: string;
   noteType: string;
   loanStage: string | null;
+  /** The broker's current date, e.g. "Saturday 2026-11-28" — lets the model resolve "next Tuesday". */
+  today?: string;
 }): string {
   const body =
     text.length > AI_MAX_INPUT_CHARS ? `${text.slice(0, AI_MAX_INPUT_CHARS)}\n[…truncated]` : text;
   return [
+    ...(today ? [`Today: ${today} (Australia/Sydney)`] : []),
     `Note title: ${title || "(untitled)"}`,
     `Note type: ${noteType}`,
     `Loan stage: ${loanStage ?? "not set"}`,
@@ -81,7 +95,28 @@ const isoDate = z
   .string()
   .nullable()
   .optional()
-  .transform((v) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null));
+  .transform((v) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) && parseIsoDate(v) ? v : null));
+
+const hhmm = z
+  .string()
+  .nullable()
+  .optional()
+  .transform((v) => {
+    const m = v ? /^(\d{1,2}):(\d{2})$/.exec(v.trim()) : null;
+    if (!m || Number(m[1]) > 23 || Number(m[2]) > 59) return null;
+    return `${m[1]!.padStart(2, "0")}:${m[2]}`;
+  });
+
+export const DATE_KINDS = ["meeting", "follow_up", "deadline"] as const;
+export type SpottedDateKind = (typeof DATE_KINDS)[number];
+
+/** One date the AI found in the note text (kept only if it's a real calendar date). */
+const spottedDate = z.object({
+  kind: z.enum(DATE_KINDS).catch("deadline"),
+  date: isoDate,
+  time: hhmm,
+  label: z.string().trim().min(1).max(200).catch("Date mentioned in the note"),
+});
 
 export const analysisSchema = z.object({
   summary: z.string().trim().min(1).max(2000),
@@ -124,6 +159,18 @@ export const analysisSchema = z.object({
         .transform((i) => i.slice(0, 5)),
     })
     .default({ status: "needs_attention", issues: [] }),
+  // Analyses saved before this field existed still parse (as "no dates found").
+  dates: z
+    .array(z.unknown())
+    .max(30)
+    .catch([])
+    .default([])
+    .transform((items) =>
+      items
+        .map((i) => spottedDate.safeParse(i))
+        .flatMap((r) => (r.success && r.data.date ? [{ ...r.data, date: r.data.date }] : []))
+        .slice(0, 6),
+    ),
 });
 
 export type Analysis = z.output<typeof analysisSchema>;

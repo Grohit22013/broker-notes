@@ -14,6 +14,7 @@ import { useRouter } from "next/navigation";
 import {
   Banknote,
   Briefcase,
+  CalendarDays,
   Check,
   Loader2,
   Lock,
@@ -54,7 +55,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { useMediaQuery } from "@/hooks/use-media-query";
-import { parseIsoDate, zonedMidnight } from "@broker-notes/shared/dates";
+import { parseIsoDate, parseLocalDateTime, zonedMidnight } from "@broker-notes/shared/dates";
 import { formatAud, formatAudCompact, parseMoney, parseRate } from "@broker-notes/shared/money";
 import { LENDERS, lvrOf, type KeyFigures } from "@broker-notes/shared/notes/figures";
 import { MAX_TAGS, normalizeTags, parseTagInput } from "@broker-notes/shared/notes/tags";
@@ -205,6 +206,7 @@ export function NoteDetailsSummary() {
     !meta.loanStage &&
     meta.noteType === "GENERAL" &&
     !followUp &&
+    !meta.meetingAt &&
     meta.tags.length === 0 &&
     Object.keys(k).length === 0;
 
@@ -235,6 +237,7 @@ export function NoteDetailsSummary() {
             </FigureBadge>
           ) : null}
           {k.lender ? <FigureBadge>{k.lender}</FigureBadge> : null}
+          {meta.meetingAt ? <MeetingBadge at={meta.meetingAt} /> : null}
           {followUp ? <FollowUpBadge date={zonedMidnight(followUp)} /> : null}
           {meta.tags.map((t) => (
             <TagBadge key={t} tag={t} />
@@ -359,6 +362,33 @@ export function NoteDetailsSheet() {
                 </Button>
               ) : null}
             </div>
+          </Field>
+
+          <Field label="Meeting date & time" htmlFor={`${ids}-meeting`}>
+            <div className="flex gap-2">
+              <Input
+                id={`${ids}-meeting`}
+                type="datetime-local"
+                value={meta.meetingAt ?? ""}
+                disabled={locked}
+                onChange={(e) => {
+                  // Only complete values (the browser gives "" while a part is still empty).
+                  if (e.target.value) update({ meetingAt: e.target.value });
+                }}
+                className="h-11 min-w-0 flex-1 text-base md:text-sm"
+              />
+              {meta.meetingAt && !locked ? (
+                <Button
+                  variant="ghost"
+                  className="h-11"
+                  onClick={() => update({ meetingAt: null })}
+                  aria-label="Clear meeting time"
+                >
+                  <X className="size-4" />
+                </Button>
+              ) : null}
+            </div>
+            <p className="text-muted-foreground text-xs">Shows on the calendar (Sydney time).</p>
           </Field>
 
           <TagsField
@@ -814,5 +844,25 @@ function TagsField({
       </datalist>
       <p className="text-muted-foreground text-xs">Press Enter or comma to add a tag.</p>
     </div>
+  );
+}
+
+/** "Meeting · Thu 3 Dec, 2:30 pm" (Sydney time). */
+function MeetingBadge({ at }: { at: string }) {
+  const when = parseLocalDateTime(at);
+  if (!when) return null;
+  const label = new Intl.DateTimeFormat("en-AU", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "Australia/Sydney",
+  }).format(when);
+  return (
+    <span className="inline-flex h-6 items-center gap-1 rounded-full bg-violet-100 px-2.5 text-xs font-medium whitespace-nowrap text-violet-800 dark:bg-violet-950 dark:text-violet-300">
+      <CalendarDays className="size-3.5" aria-hidden />
+      Meeting · {label}
+    </span>
   );
 }

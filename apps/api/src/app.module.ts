@@ -8,6 +8,7 @@ import { AiService } from "./ai/ai.service";
 import { OpenRouterClient } from "./ai/openrouter.client";
 import { Public } from "./auth/auth.guard";
 import { AuthModule } from "./auth/auth.module";
+import { CalendarController, CalendarService } from "./calendar/calendar.controller";
 import { CasesController } from "./cases/cases.controller";
 import { CasesService } from "./cases/cases.service";
 import { ClientsController } from "./clients/clients.controller";
@@ -56,6 +57,7 @@ class HealthController {
     DashboardController,
     TasksController,
     TemplatesController,
+    CalendarController,
   ],
   providers: [
     NotesService,
@@ -67,6 +69,7 @@ class HealthController {
     DashboardService,
     TasksService,
     TemplatesService,
+    CalendarService,
     { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })

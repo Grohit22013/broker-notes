@@ -16,7 +16,7 @@ import {
 } from "@broker-notes/shared/ai/analysis";
 import { AI_DAILY_LIMIT, isFreeModel } from "@broker-notes/shared/ai/config";
 import { redact } from "@broker-notes/shared/ai/redact";
-import { startOfZonedDay } from "@broker-notes/shared/dates";
+import { startOfZonedDay, toIsoDate } from "@broker-notes/shared/dates";
 import type { AiStatusDto, NoteAnalysisDto } from "@broker-notes/shared/dto";
 import { displayTitle } from "@broker-notes/shared/notes/content";
 
@@ -30,6 +30,15 @@ import { OpenRouterClient } from "./openrouter.client";
 const MIN_TEXT = 20;
 
 const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
+
+/** e.g. "Saturday 2026-11-28" — lets the model resolve "next Tuesday" in the broker's zone. */
+function todayInSydney(now = new Date()): string {
+  const weekday = new Intl.DateTimeFormat("en-AU", {
+    weekday: "long",
+    timeZone: "Australia/Sydney",
+  }).format(now);
+  return `${weekday} ${toIsoDate(now)}`;
+}
 
 /**
  * "Analyse note": one structured AI call per analysis (summary, action items, key figures,
@@ -121,6 +130,7 @@ export class AiService {
         text: body.text,
         noteType: note.noteType,
         loanStage: note.loanStage,
+        today: todayInSydney(),
       }),
     );
     await this.db.aiUsage.create({

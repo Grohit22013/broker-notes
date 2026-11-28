@@ -5,6 +5,7 @@ import type {
   CaseDetailDto,
   CaseListItemDto,
   CaseOptionDto,
+  CalendarDto,
   DashboardDto,
   OrgTemplateDto,
   TaskDto,
@@ -49,6 +50,10 @@ export const existingClientEmails = () => apiGet<string[]>("/clients/emails");
 export const getOrganisation = () => apiGet<OrganisationDto>("/organisation");
 
 export const getDashboard = () => apiGet<DashboardDto>("/dashboard");
+
+/** Meetings, follow-ups and open tasks between two "YYYY-MM-DD" days. */
+export const getCalendar = (from: string, to: string) =>
+  apiGet<CalendarDto>(`/calendar?from=${from}&to=${to}`);
 
 /** The brokerage's own note templates. */
 export const orgTemplates = () => apiGet<OrgTemplateDto[]>("/templates");

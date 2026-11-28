@@ -111,3 +111,38 @@ export function toIsoDateTime(date: Date, timeZone = BROKER_TIME_ZONE): string {
   const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
   return `${get("year")}-${get("month")}-${get("day")} ${get("hour")}:${get("minute")}`;
 }
+
+// ── Date + time (meetings) ───────────────────────────────────────────────────
+
+/** The UTC instant of a wall-clock time on a calendar day in the given zone (DST-aware). */
+export function zonedWallTime(
+  { year, month, day }: YMD,
+  hour: number,
+  minute: number,
+  timeZone = BROKER_TIME_ZONE,
+): Date {
+  const utcGuess = Date.UTC(year, month - 1, day, hour, minute);
+  let instant = utcGuess - zoneOffsetMs(utcGuess, timeZone);
+  instant = utcGuess - zoneOffsetMs(instant, timeZone);
+  return new Date(instant);
+}
+
+/** "2026-12-03T14:30" (as from <input type="datetime-local">) → instant, or null if invalid. */
+export function parseLocalDateTime(value: string, timeZone = BROKER_TIME_ZONE): Date | null {
+  const m = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})$/.exec(value);
+  if (!m) return null;
+  const ymd = parseIsoDate(m[1]!);
+  const [hour, minute] = [Number(m[2]), Number(m[3])];
+  if (!ymd || hour > 23 || minute > 59) return null;
+  return zonedWallTime(ymd, hour, minute, timeZone);
+}
+
+/** Instant → "2026-12-03T14:30" in the broker's zone (for <input type="datetime-local">). */
+export function toLocalDateTime(date: Date, timeZone = BROKER_TIME_ZONE): string {
+  return toIsoDateTime(date, timeZone).replace(" ", "T");
+}
+
+/** Instant → "14:30" in the broker's zone. */
+export function toLocalTime(date: Date, timeZone = BROKER_TIME_ZONE): string {
+  return toIsoDateTime(date, timeZone).slice(11, 16);
+}
