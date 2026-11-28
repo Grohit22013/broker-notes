@@ -39,7 +39,7 @@ const eslintConfig = [
   },
   {
     // CI helper scripts: plain CommonJS Node scripts whose job is printing a summary to stdout.
-    files: [".github/scripts/**/*.cjs"],
+    files: [".github/scripts/**/*.cjs", "apps/api/prisma/*.cjs"],
     rules: { "@typescript-eslint/no-require-imports": "off", "no-console": "off" },
   },
   {

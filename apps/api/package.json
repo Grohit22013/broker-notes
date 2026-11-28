@@ -13,7 +13,8 @@
     "postinstall": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "db:seed": "node --env-file-if-exists=.env prisma/seed.cjs"
   },
   "dependencies": {
     "@broker-notes/shared": "*",

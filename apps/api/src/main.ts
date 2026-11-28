@@ -16,6 +16,10 @@ import { loadConfig, SESSION_COOKIE } from "./config";
 /** Shared app setup — used by main() and by the integration tests, so tests run the real thing. */
 export function configureApp(app: INestApplication) {
   const config = loadConfig();
+  if (config.TRUST_PROXY > 0) {
+    // Behind Render (+ Vercel's rewrite): use X-Forwarded-For so per-IP limits apply per visitor.
+    app.getHttpAdapter().getInstance().set("trust proxy", config.TRUST_PROXY);
+  }
   app.use(helmet());
   app.use(cookieParser());
   app.enableCors({ origin: config.WEB_ORIGIN, credentials: true });
