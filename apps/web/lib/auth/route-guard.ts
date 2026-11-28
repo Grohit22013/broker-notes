@@ -3,6 +3,7 @@ export const PROTECTED_PREFIXES = [
   "/dashboard",
   "/notes",
   "/cases",
+  "/tasks",
   "/clients",
   "/settings",
 ] as const;

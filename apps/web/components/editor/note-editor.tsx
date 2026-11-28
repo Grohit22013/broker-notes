@@ -39,6 +39,8 @@ export type NoteEditorApi = {
   insertChecklist: (heading: string, items: string[]) => void;
   /** Appends a heading + paragraph (e.g. an AI summary) to the end of the note. */
   insertSection: (heading: string, text: string) => void;
+  /** The current document (e.g. to turn its unticked checklist into tasks). */
+  getDoc: () => DocJson;
 };
 
 type Draft = { title: string; contentJson: DocJson; contentText: string };
@@ -128,6 +130,7 @@ export function NoteEditor({
       },
       isSaved: () => statusRef.current === "saved" || statusRef.current === "idle",
       flush,
+      getDoc: () => toPlainDoc(editor.getJSON()),
       insertChecklist: (heading, items) => {
         editor
           .chain()

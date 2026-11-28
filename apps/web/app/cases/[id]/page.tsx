@@ -9,7 +9,9 @@ import { NoteCard } from "@/components/notes/note-card";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser, requireUser } from "@/lib/auth/session";
-import { activeMembers, getCase, listNotes } from "@/lib/api/queries";
+import { activeMembers, getCase, listNotes, listTasks } from "@/lib/api/queries";
+import { TaskFormDialog } from "@/components/tasks/task-form-dialog";
+import { TaskList } from "@/components/tasks/task-list";
 import { formatDateTime, formatRelative } from "@/lib/format";
 import { toNoteCardData } from "@/lib/notes/view";
 import { caseTypeLabel } from "@broker-notes/shared/cases/taxonomy";
@@ -31,10 +33,12 @@ export default async function CasePage({ params }: Props) {
   const { id } = await params;
   const user = await requireUser();
   const canManage = canManageCases(user);
-  const [c, advisers] = await Promise.all([
+  const [c, members, tasks] = await Promise.all([
     getCase(id),
-    canManage ? activeMembers() : Promise.resolve([]),
+    activeMembers(),
+    listTasks({ case: id }),
   ]);
+  const advisers = canManage ? members : [];
   // Timeline: the case's notes (whoever wrote them), newest first, pinned on top.
   const notes = await listNotes(parseNoteFilters({ case: c.id }));
   const lvr = lvrOf({ loanAmount: c.loanAmount, propertyValue: c.propertyValue });
@@ -112,6 +116,30 @@ export default async function CasePage({ params }: Props) {
             </div>
           ))}
         </dl>
+
+        <section aria-labelledby="case-tasks" className="grid min-w-0 grid-cols-1 gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 id="case-tasks" className="text-lg font-semibold">
+              Open tasks <span className="text-muted-foreground font-normal">({tasks.length})</span>
+            </h2>
+            <TaskFormDialog
+              members={members}
+              defaultAssigneeId={user.id}
+              links={{ caseId: c.id, label: `${c.reference} (${c.client.name})` }}
+              trigger={
+                <Button variant="outline" className="h-10">
+                  <Plus className="size-4" aria-hidden /> Add task
+                </Button>
+              }
+            />
+          </div>
+          <TaskList
+            tasks={tasks}
+            members={members}
+            hide={{ case: true, client: true }}
+            empty="No open tasks for this case."
+          />
+        </section>
 
         <section aria-labelledby="case-notes">
           <h2 id="case-notes" className="mb-3 text-lg font-semibold">

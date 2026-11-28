@@ -1,4 +1,12 @@
-import { Briefcase, FileText, LayoutDashboard, Plus, Users, type LucideIcon } from "lucide-react";
+import {
+  Briefcase,
+  FileText,
+  LayoutDashboard,
+  ListTodo,
+  Plus,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
 
 export const siteConfig = {
   name: "BrokerNotes",
@@ -16,6 +24,7 @@ export const mainNav: NavItem[] = [
   { href: "/dashboard", label: "Home", icon: LayoutDashboard },
   { href: "/notes", label: "Notes", icon: FileText },
   { href: "/notes/new", label: "New", icon: Plus },
+  { href: "/tasks", label: "Tasks", icon: ListTodo },
   { href: "/cases", label: "Cases", icon: Briefcase },
   { href: "/clients", label: "Clients", icon: Users },
 ];

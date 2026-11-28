@@ -17,7 +17,9 @@ import { NoteCard } from "@/components/notes/note-card";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser, requireUser } from "@/lib/auth/session";
-import { activeMembers, getClient, listCases } from "@/lib/api/queries";
+import { activeMembers, getClient, listCases, listTasks } from "@/lib/api/queries";
+import { TaskFormDialog } from "@/components/tasks/task-form-dialog";
+import { TaskList } from "@/components/tasks/task-list";
 import { CaseCard } from "@/components/cases/case-card";
 import { CaseFormDialog } from "@/components/cases/case-form-dialog";
 import { canManageCases, canManageClients } from "@broker-notes/shared/orgs/roles";
@@ -46,9 +48,11 @@ export default async function ClientPage({ params }: Props) {
   if (!client) notFound();
 
   // Timeline: this client's notes (everyone in the brokerage), newest first, pinned on top.
-  const [notes, cases] = await Promise.all([
+  const [notes, cases, tasks, members] = await Promise.all([
     listNotes(parseNoteFilters({ client: client.id })),
     listCases({ client: client.id, status: "all" }),
+    listTasks({ client: client.id }),
+    activeMembers(),
   ]);
   const canOpenCase = canManageCases(user);
 
@@ -151,6 +155,30 @@ export default async function ClientPage({ params }: Props) {
             ))}
           </ul>
         )}
+      </section>
+
+      <section aria-labelledby="client-tasks" className="mb-8 grid min-w-0 grid-cols-1 gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 id="client-tasks" className="text-lg font-semibold">
+            Open tasks <span className="text-muted-foreground font-normal">({tasks.length})</span>
+          </h2>
+          <TaskFormDialog
+            members={members}
+            defaultAssigneeId={user.id}
+            links={{ clientId: client.id, label: client.name }}
+            trigger={
+              <Button variant="outline" className="h-10">
+                <Plus className="size-4" aria-hidden /> Add task
+              </Button>
+            }
+          />
+        </div>
+        <TaskList
+          tasks={tasks}
+          members={members}
+          hide={{ client: true }}
+          empty="No open tasks for this client."
+        />
       </section>
 
       <h2 className="mb-3 text-lg font-semibold">

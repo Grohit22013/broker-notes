@@ -10,6 +10,7 @@ describe("routeDecision (middleware guard)", () => {
     ["/clients/9", "?tab=notes"],
     ["/settings/team", ""],
     ["/dashboard", ""],
+    ["/tasks", "?due=overdue"],
     ["/cases/abc", "?tab=notes"],
     ["/settings/audit", "?category=note"],
   ])("redirects signed-out access to %s%s → /login with a relative callbackUrl", (path, search) => {

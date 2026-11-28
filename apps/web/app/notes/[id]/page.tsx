@@ -7,7 +7,7 @@ import { getCurrentUser, requireUser } from "@/lib/auth/session";
 import { clientOptions } from "@/lib/api/queries";
 import { toIsoDate } from "@broker-notes/shared/dates";
 import { displayTitle } from "@broker-notes/shared/notes/content";
-import { getNote, getNoteFacets } from "@/lib/api/queries";
+import { activeMembers, getNote, getNoteFacets, listTasks } from "@/lib/api/queries";
 import { canEditNote, canManageClients } from "@broker-notes/shared/orgs/roles";
 
 type Props = { params: Promise<{ id: string }> };
@@ -23,10 +23,12 @@ export default async function NotePage({ params }: Props) {
   const { id } = await params;
   const user = await requireUser();
   // Scoped by brokerage: another brokerage's note id resolves to a 404, never its content.
-  const [note, facets, clients] = await Promise.all([
+  const [note, facets, clients, tasks, members] = await Promise.all([
     getNote(id),
     getNoteFacets(),
     clientOptions(),
+    listTasks({ note: id, status: "all" }),
+    activeMembers(),
   ]);
   if (!note) notFound();
   const canEdit = canEditNote(user, note.author.id);
@@ -60,6 +62,9 @@ export default async function NotePage({ params }: Props) {
         createdAt={note.createdAt}
         author={note.author.id === user.id ? null : note.author.name}
         canEdit={canEdit}
+        tasks={tasks}
+        members={members}
+        currentUserId={user.id}
         finalisedAt={note.finalisedAt}
         amendments={note.amendments.map((a) => ({
           id: a.id,
