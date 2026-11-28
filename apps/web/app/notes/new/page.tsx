@@ -3,17 +3,23 @@ import type { Metadata } from "next";
 import { TemplatePicker } from "@/components/notes/template-picker";
 import { PageHeader } from "@/components/shared/page-header";
 import { requireUser } from "@/lib/auth/session";
-import { clientOptions } from "@/lib/api/queries";
+import { caseOptions, clientOptions } from "@/lib/api/queries";
 import { BLANK_TEMPLATE_ID, TEMPLATES } from "@broker-notes/shared/notes/templates";
 
 export const metadata: Metadata = { title: "New note" };
 
-type Props = { searchParams: Promise<{ client?: string }> };
+type Props = { searchParams: Promise<{ client?: string; case?: string }> };
 
 export default async function NewNotePage({ searchParams }: Props) {
   await requireUser();
-  const [{ client }, clients] = await Promise.all([searchParams, clientOptions()]);
-  const defaultClientId = clients.some((c) => c.id === client) ? client : undefined;
+  const [{ client, case: caseId }, clients, cases] = await Promise.all([
+    searchParams,
+    clientOptions(),
+    caseOptions(),
+  ]);
+  const forCase = cases.find((c) => c.id === caseId);
+  const defaultClientId =
+    forCase?.clientId ?? (clients.some((c) => c.id === client) ? client : undefined);
 
   return (
     <div className="container-page">
@@ -24,6 +30,7 @@ export default async function NewNotePage({ searchParams }: Props) {
       <TemplatePicker
         clients={clients}
         defaultClientId={defaultClientId}
+        forCase={forCase ? { id: forCase.id, reference: forCase.reference } : undefined}
         templates={[
           {
             id: BLANK_TEMPLATE_ID,

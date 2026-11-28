@@ -9,6 +9,8 @@ describe("routeDecision (middleware guard)", () => {
     ["/clients", ""],
     ["/clients/9", "?tab=notes"],
     ["/settings/team", ""],
+    ["/dashboard", ""],
+    ["/cases/abc", "?tab=notes"],
     ["/settings/audit", "?category=note"],
   ])("redirects signed-out access to %s%s → /login with a relative callbackUrl", (path, search) => {
     const d = routeDecision(path, search, false);
@@ -29,7 +31,10 @@ describe("routeDecision (middleware guard)", () => {
   });
 
   it("redirects signed-in users away from login/register", () => {
-    expect(routeDecision("/login", "", true)).toEqual({ action: "redirect", to: "/notes" });
-    expect(routeDecision("/register", "?x=1", true)).toEqual({ action: "redirect", to: "/notes" });
+    expect(routeDecision("/login", "", true)).toEqual({ action: "redirect", to: "/dashboard" });
+    expect(routeDecision("/register", "?x=1", true)).toEqual({
+      action: "redirect",
+      to: "/dashboard",
+    });
   });
 });

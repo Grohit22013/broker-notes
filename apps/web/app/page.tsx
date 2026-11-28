@@ -45,7 +45,7 @@ export default async function HomePage() {
           {user ? (
             <>
               <Button asChild size="lg" className="h-11">
-                <Link href="/notes">Open my notes</Link>
+                <Link href="/dashboard">Open my dashboard</Link>
               </Button>
               <Button asChild size="lg" variant="outline" className="h-11">
                 <Link href="/notes/new">Start a new note</Link>
@@ -68,7 +68,7 @@ export default async function HomePage() {
         <h2 id="features-heading" className="sr-only">
           Features
         </h2>
-        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {features.map(({ icon: Icon, title, body }) => (
             <li key={title} className="bg-card rounded-xl border p-5">
               <Icon className="text-primary size-5" aria-hidden />

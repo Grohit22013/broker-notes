@@ -46,7 +46,8 @@ test("invite → join as case manager → view-only access → audit → deactiv
   await cm.getByLabel("Password", { exact: true }).fill(E2E_PASSWORD);
   await cm.getByLabel("Confirm password").fill(E2E_PASSWORD);
   await cm.getByRole("button", { name: "Join brokerage" }).click();
-  await expect(cm).toHaveURL(/\/notes$/, { timeout: 30_000 });
+  await expect(cm).toHaveURL(/\/dashboard$/, { timeout: 30_000 });
+  await cm.goto("/notes");
 
   // Sees the brokerage's note, credited to its author, but can't export…
   await expect(cm.getByText("by Team Admin")).toBeVisible();

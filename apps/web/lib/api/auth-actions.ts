@@ -50,7 +50,7 @@ export async function registerAction(
       ? { fieldErrors: { [res.field]: res.error } as FieldErrors<RegisterInput>, values }
       : { error: res.error, values };
   }
-  go("/notes");
+  go("/dashboard");
   return {};
 }
 

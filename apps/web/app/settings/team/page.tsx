@@ -39,7 +39,7 @@ export default async function TeamPage() {
           <h2 id="roles-title" className="text-lg font-semibold">
             What each role can do
           </h2>
-          <ul className="grid gap-3 sm:grid-cols-3">
+          <ul className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             {ROLES.map((r) => (
               <li key={r.value} className="bg-card rounded-xl border p-4">
                 <p className="font-medium">{r.label}</p>

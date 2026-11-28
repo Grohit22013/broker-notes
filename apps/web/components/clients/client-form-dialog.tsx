@@ -93,7 +93,7 @@ export function ClientFormDialog({ trigger, client, advisers = [] }: Props) {
               {error.message}
             </p>
           ) : null}
-          <div className="grid gap-2">
+          <div className="grid min-w-0 grid-cols-1 gap-2">
             <Label htmlFor="client-name">Name</Label>
             <Input
               id="client-name"
@@ -107,7 +107,7 @@ export function ClientFormDialog({ trigger, client, advisers = [] }: Props) {
             />
             {fieldError("name")}
           </div>
-          <div className="grid gap-2">
+          <div className="grid min-w-0 grid-cols-1 gap-2">
             <Label htmlFor="client-email">Email</Label>
             <Input
               id="client-email"
@@ -121,7 +121,7 @@ export function ClientFormDialog({ trigger, client, advisers = [] }: Props) {
             />
             {fieldError("email")}
           </div>
-          <div className="grid gap-2">
+          <div className="grid min-w-0 grid-cols-1 gap-2">
             <Label htmlFor="client-phone">Phone</Label>
             <Input
               id="client-phone"
@@ -136,7 +136,7 @@ export function ClientFormDialog({ trigger, client, advisers = [] }: Props) {
             {fieldError("phone")}
           </div>
           {advisers.length ? (
-            <div className="grid gap-2">
+            <div className="grid min-w-0 grid-cols-1 gap-2">
               <Label htmlFor="client-adviser">Assigned adviser</Label>
               <Select value={adviserId} onValueChange={setAdviserId}>
                 <SelectTrigger id="client-adviser" className="h-11 w-full">

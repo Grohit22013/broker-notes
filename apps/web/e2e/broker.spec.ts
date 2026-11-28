@@ -194,7 +194,7 @@ test.describe("broker features", () => {
     );
     const text = await res.text();
     expect(text.charCodeAt(0)).toBe(0xfeff); // BOM for Excel
-    expect(text).toContain("Title,Client,Author,Note type,Loan stage");
+    expect(text).toContain("Title,Client,Case,Author,Note type,Loan stage");
     expect(text).toContain(`"'=HYPERLINK(""http://evil.example"",""x"")"`); // neutralised + quoted
     expect(text).toContain('"Settled, with comma"');
 

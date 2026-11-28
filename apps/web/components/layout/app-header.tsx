@@ -18,7 +18,7 @@ export function AppHeader({ user }: { user: CurrentUser | null }) {
     <header className="bg-background/80 pt-safe supports-[backdrop-filter]:bg-background/60 sticky top-0 z-40 border-b backdrop-blur">
       <div className="container-page flex h-14 items-center gap-6">
         <Link
-          href={user ? "/notes" : "/"}
+          href={user ? "/dashboard" : "/"}
           className="flex items-center gap-2 font-semibold tracking-tight"
           aria-label={`${siteConfig.name} home`}
         >

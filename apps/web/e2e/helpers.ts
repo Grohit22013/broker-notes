@@ -16,7 +16,7 @@ export async function register(page: Page, name: string, email: string) {
   await page.getByLabel("Confirm password").fill(E2E_PASSWORD);
   await page.getByRole("button", { name: "Create account" }).click();
   // Registration hashes the password twice (create + sign-in): allow for slow machines.
-  await expect(page).toHaveURL(/\/notes$/, { timeout: 30_000 });
+  await expect(page).toHaveURL(/\/dashboard$/, { timeout: 30_000 });
 }
 
 /** The save indicator is rendered twice (mobile/desktop placements); use the visible one. */

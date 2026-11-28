@@ -1,4 +1,4 @@
-export const DEFAULT_AUTHED_PATH = "/notes";
+export const DEFAULT_AUTHED_PATH = "/dashboard";
 
 /**
  * Only allow same-site relative paths as post-login redirects.

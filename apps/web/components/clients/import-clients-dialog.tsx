@@ -178,7 +178,7 @@ export function ImportClientsDialog({ existingEmails }: { existingEmails: string
 
             {parsed ? (
               <>
-                <fieldset className="grid gap-3 sm:grid-cols-3">
+                <fieldset className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   <legend className="mb-2 text-sm font-medium">Match your columns</legend>
                   {(["name", "email", "phone"] as const).map((field) => (
                     <div key={field} className="grid gap-1.5">

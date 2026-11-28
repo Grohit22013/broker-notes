@@ -15,6 +15,7 @@ test.describe("notes with the Tiptap editor", () => {
     await register(page, "Asha Broker", uniqueEmail("flow"));
 
     // Empty state on first visit
+    await page.goto("/notes");
     await expect(page.getByRole("heading", { name: "No notes yet" })).toBeVisible();
     await page.getByRole("link", { name: "Create your first note" }).click();
     await page.getByRole("button", { name: "Create note from template: Blank note" }).click();

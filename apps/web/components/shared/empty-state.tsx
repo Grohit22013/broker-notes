@@ -25,7 +25,9 @@ export function EmptyState({ icon: Icon, title, description, action, className }
       {description ? (
         <p className="text-muted-foreground mt-1 max-w-sm text-sm">{description}</p>
       ) : null}
-      {action ? <div className="mt-6">{action}</div> : null}
+      {action ? (
+        <div className="mt-6 max-w-full [&_a]:max-w-full [&_a]:truncate">{action}</div>
+      ) : null}
     </div>
   );
 }

@@ -43,10 +43,13 @@ export function TemplatePicker({
   templates,
   clients,
   defaultClientId,
+  forCase,
 }: {
   templates: TemplateCard[];
   clients: { id: string; name: string }[];
   defaultClientId?: string;
+  /** Creating the note for this case (its client is fixed). */
+  forCase?: { id: string; reference: string };
 }) {
   const [clientId, setClientId] = useState(defaultClientId ?? NO_CLIENT);
   const createNote = useCreateNoteAction();
@@ -56,7 +59,7 @@ export function TemplatePicker({
       {clients.length ? (
         <div className="grid max-w-sm gap-2">
           <Label htmlFor="new-note-client">For client (optional)</Label>
-          <Select value={clientId} onValueChange={setClientId}>
+          <Select value={clientId} onValueChange={setClientId} disabled={Boolean(forCase)}>
             <SelectTrigger id="new-note-client" className="h-11 w-full">
               <SelectValue />
             </SelectTrigger>
@@ -69,14 +72,24 @@ export function TemplatePicker({
               ))}
             </SelectContent>
           </Select>
+          {forCase ? (
+            <p className="text-muted-foreground text-sm">
+              For case{" "}
+              <span className="text-foreground font-mono font-medium">{forCase.reference}</span>
+            </p>
+          ) : null}
         </div>
       ) : null}
 
-      <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-label="Note templates">
+      <ul
+        className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"
+        aria-label="Note templates"
+      >
         {templates.map((t) => (
           <li key={t.id}>
             <form action={createNote} className="h-full">
               <input type="hidden" name="templateId" value={t.id} />
+              {forCase ? <input type="hidden" name="caseId" value={forCase.id} /> : null}
               {clientId !== NO_CLIENT ? (
                 <input type="hidden" name="clientId" value={clientId} />
               ) : null}

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Download, FileText, SearchX, UserRound, X } from "lucide-react";
+import { Briefcase, Download, FileText, SearchX, UserRound, X } from "lucide-react";
 
 import { NewNoteButton } from "@/components/notes/new-note-button";
 import { NoteCard } from "@/components/notes/note-card";
@@ -9,7 +9,7 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/session";
-import { getClient } from "@/lib/api/queries";
+import { getCase, getClient } from "@/lib/api/queries";
 import {
   filtersToSearchParams,
   hasAnyFilter,
@@ -27,14 +27,16 @@ export default async function NotesPage({ searchParams }: Props) {
   // Defence in depth: middleware already guards this route.
   const user = await requireUser();
   const filters = parseNoteFilters(await searchParams);
-  const [notes, facets, client] = await Promise.all([
+  const [notes, facets, client, linkedCase] = await Promise.all([
     listNotes(filters),
     getNoteFacets(),
     filters.client ? getClient(filters.client) : null,
+    filters.case ? getCase(filters.case) : null,
   ]);
   const filtering = hasAnyFilter(filters);
   const exportQuery = filtersToSearchParams(filters).toString();
   const withoutClient = filtersToSearchParams({ ...filters, client: undefined }).toString();
+  const withoutCase = filtersToSearchParams({ ...filters, case: undefined }).toString();
 
   if (facets.total === 0) {
     return (
@@ -80,6 +82,20 @@ export default async function NotesPage({ searchParams }: Props) {
         }
       />
 
+      {linkedCase ? (
+        <div className="mb-3">
+          <Link
+            href={withoutCase ? `/notes?${withoutCase}` : "/notes"}
+            className="bg-primary/10 text-primary hover:bg-primary/15 inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-sm font-medium"
+            aria-label={`Remove case filter: ${linkedCase.reference}`}
+          >
+            <Briefcase className="size-4" aria-hidden />
+            <span className="font-mono">{linkedCase.reference}</span> · {linkedCase.client.name}
+            <X className="size-4" aria-hidden />
+          </Link>
+        </div>
+      ) : null}
+
       {client ? (
         <div className="mb-3">
           <Link
@@ -114,7 +130,7 @@ export default async function NotesPage({ searchParams }: Props) {
           }
         />
       ) : (
-        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {notes.map((n) => (
             <NoteCard key={n.id} query={filters.q} note={toNoteCardData(n, user)} />
           ))}

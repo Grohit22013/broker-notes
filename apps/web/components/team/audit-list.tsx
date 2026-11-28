@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import {
+  Briefcase,
   Download,
   FileText,
   History,
@@ -24,6 +25,7 @@ import { categoryOf, type AuditCategory } from "@broker-notes/shared/orgs/audit"
 const ICONS: Record<AuditCategory, LucideIcon> = {
   note: FileText,
   client: UserRound,
+  case: Briefcase,
   team: UsersRound,
   export: Download,
   ai: Sparkles,
@@ -35,6 +37,7 @@ function hrefOf(e: AuditEntryDto): string | null {
   if (!e.entityId) return null;
   if (e.entityType === "note" && e.action !== "note.deleted") return `/notes/${e.entityId}`;
   if (e.entityType === "client") return `/clients/${e.entityId}`;
+  if (e.entityType === "case") return `/cases/${e.entityId}`;
   return null;
 }
 

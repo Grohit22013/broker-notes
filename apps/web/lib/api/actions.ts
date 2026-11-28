@@ -49,9 +49,11 @@ export type UpdateNoteMetaInput = {
   followUpDate?: string | null;
   pinned?: boolean;
   clientId?: string | null;
+  caseId?: string | null;
   keyFigures?: KeyFigures | null;
   /** UI-only fields the optimistic update carries along; not sent. */
   clientName?: string | null;
+  caseReference?: string | null;
   status?: string;
 };
 
@@ -60,7 +62,13 @@ export type SaveNoteMetaResult = { ok: true; meta: NoteMetaDto } | Fail;
 export async function updateNoteMetaAction(
   input: UpdateNoteMetaInput,
 ): Promise<SaveNoteMetaResult> {
-  const { id, clientName: _clientName, status: _status, ...body } = input;
+  const {
+    id,
+    clientName: _clientName,
+    caseReference: _caseReference,
+    status: _status,
+    ...body
+  } = input;
   const res = await api<NoteMetaDto>("PATCH", `/notes/${id}/meta`, body);
   return res.ok ? { ok: true, meta: res.data } : { ok: false, error: res.error };
 }
@@ -69,6 +77,7 @@ export async function updateNoteMetaAction(
 export async function createNote(input: {
   templateId?: string;
   clientId?: string;
+  caseId?: string;
 }): Promise<{ ok: true; id: string } | Fail> {
   const res = await api<CreatedNoteDto>("POST", "/notes", input);
   return res.ok ? { ok: true, id: res.data.id } : { ok: false, error: res.error };
@@ -161,9 +170,11 @@ export async function importClientsAction(
 export function createNoteFromForm(formData: FormData) {
   const templateId = formData.get("templateId");
   const clientId = formData.get("clientId");
+  const caseId = formData.get("caseId");
   return createNote({
     ...(typeof templateId === "string" && templateId ? { templateId } : {}),
     ...(typeof clientId === "string" && clientId ? { clientId } : {}),
+    ...(typeof caseId === "string" && caseId ? { caseId } : {}),
   });
 }
 

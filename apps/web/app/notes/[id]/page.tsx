@@ -46,6 +46,8 @@ export default async function NotePage({ params }: Props) {
         pinned: note.pinned,
         clientId: note.client?.id ?? null,
         clientName: note.client?.name ?? null,
+        caseId: note.case?.id ?? null,
+        caseReference: note.case?.reference ?? null,
         keyFigures: note.keyFigures,
         status: note.status,
       }}
