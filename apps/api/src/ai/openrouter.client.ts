@@ -195,6 +195,18 @@ function mockAnalysis(userPrompt: string): AiResult {
         status: "needs_attention",
         issues: ["No comparison of alternative lenders is recorded."],
       },
+      dates: mockDates(userPrompt),
     },
   };
+}
+
+function mockDates(userPrompt: string) {
+  const today = /^Today: \S+ (\d{4})-(\d{2})-(\d{2})/m.exec(userPrompt);
+  if (!today) return [];
+  const t = new Date(Date.UTC(Number(today[1]), Number(today[2]) - 1, Number(today[3]) + 3));
+  const date = t.toISOString().slice(0, 10);
+  return [
+    { kind: "follow_up" as const, date, time: null, label: "Call back about payslips (mock)" },
+    { kind: "meeting" as const, date, time: "10:30", label: "Meet the ANZ BDM (mock)" },
+  ];
 }

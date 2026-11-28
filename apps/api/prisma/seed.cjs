@@ -186,13 +186,14 @@ async function main() {
     125,
   );
 
-  /** @type {Array<{client: any, case?: any, author?: any, template?: string, title?: string, type?: string, stage: string|null, tags: string[], pinned?: boolean, followUp?: Date, kf?: object, body: object, hours: number, finalise?: string[]}>} */
+  /** @type {Array<{client: any, case?: any, author?: any, meeting?: Date, template?: string, title?: string, type?: string, stage: string|null, tags: string[], pinned?: boolean, followUp?: Date, kf?: object, body: object, hours: number, finalise?: string[]}>} */
   const notes = [
     {
       client: nguyen,
       case: nguyenPurchase,
       author: adviser,
       template: "discovery",
+      meeting: hoursAgo(3),
       stage: "LEAD",
       tags: ["first-home", "fhog"],
       pinned: true,
@@ -224,6 +225,8 @@ async function main() {
       case: patelInvestment,
       author: caseManager,
       template: "conditions",
+      // A call booked with the lender in two days, 2pm Sydney.
+      meeting: new Date(day(2).getTime() + 14 * 3_600_000),
       stage: "CONDITIONAL",
       tags: ["anz", "investor"],
       followUp: day(-2),
@@ -353,6 +356,7 @@ async function main() {
         tags: n.tags,
         pinned: Boolean(n.pinned),
         followUpAt: n.followUp ?? null,
+        meetingAt: n.meeting ?? null,
         keyFigures: n.kf ?? undefined,
         createdAt: hoursAgo(n.hours + 1),
         updatedAt: hoursAgo(n.hours),
