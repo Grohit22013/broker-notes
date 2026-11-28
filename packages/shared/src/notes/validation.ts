@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { parseIsoDate } from "../dates";
+import { parseIsoDate, parseLocalDateTime } from "../dates";
 
 import { isDocJson, type DocJson } from "./content";
 import { AMENDMENT_MAX } from "./finalise";
@@ -54,6 +54,12 @@ export const updateNoteMetaSchema = z.object({
     .nullable()
     .optional(),
   pinned: z.boolean().optional(),
+  /** When the meeting took (or takes) place, "YYYY-MM-DDTHH:mm" in the broker's time zone. */
+  meetingAt: z
+    .string()
+    .refine((v) => parseLocalDateTime(v) !== null, { error: "Enter a valid date and time" })
+    .nullable()
+    .optional(),
   clientId: z.cuid({ error: "Invalid client" }).nullable().optional(),
   /** Linking a case also links its client. */
   caseId: z.cuid({ error: "Invalid case" }).nullable().optional(),

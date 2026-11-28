@@ -10,7 +10,7 @@
 export type NoteStatusValue = "DRAFT" | "FINALISED";
 
 export const WORKFLOW_FIELDS = ["followUpDate", "loanStage", "tags", "pinned"] as const;
-export const LOCKED_FIELDS = ["noteType", "clientId", "caseId", "keyFigures"] as const;
+export const LOCKED_FIELDS = ["noteType", "clientId", "caseId", "keyFigures", "meetingAt"] as const;
 
 type MetaField = (typeof WORKFLOW_FIELDS)[number] | (typeof LOCKED_FIELDS)[number];
 
