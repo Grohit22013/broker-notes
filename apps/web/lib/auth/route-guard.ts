@@ -1,5 +1,5 @@
 /** Route prefixes that require a signed-in broker. */
-export const PROTECTED_PREFIXES = ["/notes", "/clients"] as const;
+export const PROTECTED_PREFIXES = ["/notes", "/clients", "/settings"] as const;
 const AUTH_PAGES = ["/login", "/register"] as const;
 
 const matches = (pathname: string, prefix: string) =>

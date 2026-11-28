@@ -45,6 +45,10 @@ export type NoteCardData = {
   clientName: string | null;
   loanAmount: number | null;
   lvr: number | null;
+  /** Shown when someone else wrote the note (null for the viewer's own notes). */
+  authorName: string | null;
+  /** Whether the viewer may pin/delete it (author or admin). */
+  canEdit: boolean;
 };
 
 const MAX_TAGS_SHOWN = 3;
@@ -142,40 +146,43 @@ export function NoteCard({
           <time dateTime={note.updatedAt} title={formatDateTime(updated)}>
             Edited {formatRelative(updated)}
           </time>
+          {note.authorName ? <span> · by {note.authorName}</span> : null}
         </p>
       </Link>
 
-      <div className="absolute top-2 right-2">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-10"
-              aria-label={`Actions for ${shownTitle}`}
-            >
-              <MoreVertical className="size-4" aria-hidden />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onSelect={togglePin} disabled={pinPending}>
-              {note.pinned ? (
-                <>
-                  <PinOff className="size-4" aria-hidden /> Unpin
-                </>
-              ) : (
-                <>
-                  <Pin className="size-4" aria-hidden /> Pin to top
-                </>
-              )}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem variant="destructive" onSelect={() => setConfirmOpen(true)}>
-              <Trash2 className="size-4" aria-hidden /> Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+      {note.canEdit ? (
+        <div className="absolute top-2 right-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-10"
+                aria-label={`Actions for ${shownTitle}`}
+              >
+                <MoreVertical className="size-4" aria-hidden />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={togglePin} disabled={pinPending}>
+                {note.pinned ? (
+                  <>
+                    <PinOff className="size-4" aria-hidden /> Unpin
+                  </>
+                ) : (
+                  <>
+                    <Pin className="size-4" aria-hidden /> Pin to top
+                  </>
+                )}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem variant="destructive" onSelect={() => setConfirmOpen(true)}>
+                <Trash2 className="size-4" aria-hidden /> Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      ) : null}
 
       <DeleteNoteDialog
         noteId={note.id}

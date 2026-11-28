@@ -15,7 +15,16 @@ import { addAmendmentAction } from "@/lib/api/actions";
 export type AmendmentView = { id: string; body: string; createdAt: string };
 
 /** Append-only amendments shown under a finalised note. */
-export function Amendments({ noteId, initial }: { noteId: string; initial: AmendmentView[] }) {
+export function Amendments({
+  noteId,
+  initial,
+  canAdd = true,
+}: {
+  noteId: string;
+  initial: AmendmentView[];
+  /** Only the author or an admin may add amendments. */
+  canAdd?: boolean;
+}) {
   const router = useRouter();
   const id = useId();
   const [items, setItems] = useState(initial);
@@ -59,26 +68,28 @@ export function Amendments({ noteId, initial }: { noteId: string; initial: Amend
         </ol>
       ) : null}
 
-      <form onSubmit={submit} className="mt-4 space-y-2">
-        <Label htmlFor={id}>Add an amendment</Label>
-        <Textarea
-          id={id}
-          value={draft}
-          maxLength={AMENDMENT_MAX}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder="e.g. Client confirmed on 2 Dec that the deposit includes a $20k gift from parents."
-          className="min-h-24 text-base md:text-sm"
-        />
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-muted-foreground text-xs tabular-nums">
-            {draft.length}/{AMENDMENT_MAX}
-          </span>
-          <Button type="submit" className="h-10" disabled={pending || !draft.trim()}>
-            {pending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
-            Add amendment
-          </Button>
-        </div>
-      </form>
+      {canAdd ? (
+        <form onSubmit={submit} className="mt-4 space-y-2">
+          <Label htmlFor={id}>Add an amendment</Label>
+          <Textarea
+            id={id}
+            value={draft}
+            maxLength={AMENDMENT_MAX}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="e.g. Client confirmed on 2 Dec that the deposit includes a $20k gift from parents."
+            className="min-h-24 text-base md:text-sm"
+          />
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-muted-foreground text-xs tabular-nums">
+              {draft.length}/{AMENDMENT_MAX}
+            </span>
+            <Button type="submit" className="h-10" disabled={pending || !draft.trim()}>
+              {pending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
+              Add amendment
+            </Button>
+          </div>
+        </form>
+      ) : null}
     </section>
   );
 }

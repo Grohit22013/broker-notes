@@ -8,6 +8,7 @@ import { clientOptions } from "@/lib/api/queries";
 import { toIsoDate } from "@broker-notes/shared/dates";
 import { displayTitle } from "@broker-notes/shared/notes/content";
 import { getNote, getNoteFacets } from "@/lib/api/queries";
+import { canEditNote, canManageClients } from "@broker-notes/shared/orgs/roles";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -20,20 +21,23 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function NotePage({ params }: Props) {
   const { id } = await params;
-  await requireUser();
-  // Scoped by user id: someone else's note id resolves to a 404, never their content.
+  const user = await requireUser();
+  // Scoped by brokerage: another brokerage's note id resolves to a 404, never its content.
   const [note, facets, clients] = await Promise.all([
     getNote(id),
     getNoteFacets(),
     clientOptions(),
   ]);
   if (!note) notFound();
+  const canEdit = canEditNote(user, note.author.id);
 
   return (
     <NoteDetailsProvider
       noteId={note.id}
       tagSuggestions={facets.tags}
       clients={clients}
+      readOnly={!canEdit}
+      canAddClients={canManageClients(user)}
       initial={{
         noteType: note.noteType,
         loanStage: note.loanStage,
@@ -52,6 +56,8 @@ export default async function NotePage({ params }: Props) {
         displayTitle={displayTitle(note.title)}
         contentJson={note.contentJson}
         createdAt={note.createdAt}
+        author={note.author.id === user.id ? null : note.author.name}
+        canEdit={canEdit}
         finalisedAt={note.finalisedAt}
         amendments={note.amendments.map((a) => ({
           id: a.id,

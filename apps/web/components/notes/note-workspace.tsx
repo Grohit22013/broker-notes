@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from "react";
 import Link from "next/link";
-import { ChevronLeft, LockKeyhole } from "lucide-react";
+import { ChevronLeft, Eye, LockKeyhole } from "lucide-react";
 
 import { NoteEditor, type NoteEditorApi } from "@/components/editor/note-editor";
 import { AiPanel } from "@/components/notes/ai-panel";
@@ -25,14 +25,19 @@ type Props = {
   displayTitle: string;
   contentJson: DocJson;
   createdAt: string;
+  /** Author's name when someone else wrote it (null for the viewer's own note). */
+  author: string | null;
+  /** Author or admin. Others get a read-only view. */
+  canEdit: boolean;
   finalisedAt: string | null;
   amendments: AmendmentView[];
 };
 
 /** Editor page body: header actions, editor, finalised banner, amendments and side panels. */
 export function NoteWorkspace(props: Props) {
-  const { noteId, finalisedAt } = props;
+  const { noteId, finalisedAt, canEdit } = props;
   const finalised = finalisedAt !== null;
+  const readOnly = finalised || !canEdit;
   const [editorApi, setEditorApi] = useState<NoteEditorApi | null>(null);
   const onReady = useCallback((api: NoteEditorApi) => setEditorApi(api), []);
 
@@ -48,23 +53,24 @@ export function NoteWorkspace(props: Props) {
           <div className="flex items-center gap-2">
             <span className="text-muted-foreground hidden text-xs xl:inline">
               Created {formatDateTime(new Date(props.createdAt))}
+              {props.author ? ` by ${props.author}` : ""}
             </span>
             <NoteDetailsButton />
-            <AiPanel noteId={noteId} editorApi={editorApi} finalised={finalised} />
-            <VersionHistory noteId={noteId} canRestore={!finalised} editorApi={editorApi} />
-            {finalised ? null : (
+            <AiPanel noteId={noteId} editorApi={editorApi} finalised={readOnly} />
+            <VersionHistory noteId={noteId} canRestore={!readOnly} editorApi={editorApi} />
+            {readOnly ? null : (
               <FinaliseButton noteId={noteId} beforeFinalise={() => editorApi?.flush()} />
             )}
-            <NoteActionsMenu noteId={noteId} noteTitle={props.displayTitle} />
+            {canEdit ? <NoteActionsMenu noteId={noteId} noteTitle={props.displayTitle} /> : null}
           </div>
         </div>
 
         <NoteEditor
-          key={finalised ? "finalised" : "draft"}
+          key={readOnly ? "read-only" : "draft"}
           noteId={noteId}
           initialTitle={props.title}
           initialContent={props.contentJson}
-          readOnly={finalised}
+          readOnly={readOnly}
           onReady={onReady}
           aboveTitle={
             finalised ? (
@@ -75,13 +81,31 @@ export function NoteWorkspace(props: Props) {
                 <LockKeyhole className="mt-0.5 size-4 shrink-0" aria-hidden />
                 <span>
                   <strong>Finalised {formatDateTime(new Date(finalisedAt))}.</strong> This file note
-                  is locked as a compliance record. Add corrections as amendments below.
+                  is locked as a compliance record.{" "}
+                  {canEdit
+                    ? "Add corrections as amendments below."
+                    : "Its author or an admin can add amendments."}
+                </span>
+              </div>
+            ) : !canEdit ? (
+              <div
+                role="note"
+                className="bg-muted text-muted-foreground mb-4 flex items-start gap-2 rounded-lg border p-3 text-sm"
+              >
+                <Eye className="mt-0.5 size-4 shrink-0" aria-hidden />
+                <span>
+                  <strong className="text-foreground">View only.</strong> Written by {props.author}.
+                  Only the author or a brokerage admin can change this note.
                 </span>
               </div>
             ) : null
           }
           belowTitle={<NoteDetailsSummary />}
-          afterBody={finalised ? <Amendments noteId={noteId} initial={props.amendments} /> : null}
+          afterBody={
+            finalised ? (
+              <Amendments noteId={noteId} initial={props.amendments} canAdd={canEdit} />
+            ) : null
+          }
         />
       </div>
       <NoteDetailsSheet />

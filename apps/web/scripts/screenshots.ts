@@ -103,6 +103,7 @@ async function seedDemoNotes(email: string) {
     await db.note.create({
       data: {
         userId: user.id,
+        organisationId: user.organisationId,
         title: n.title,
         contentText: n.text,
         contentJson: {
@@ -304,7 +305,7 @@ async function main() {
 
   await browser.close();
   const db = new PrismaClient();
-  await db.user.deleteMany({ where: { email: EMAIL } });
+  await db.organisation.deleteMany({ where: { members: { some: { email: EMAIL } } } });
   await db.$disconnect();
   console.warn(`screenshots written to ${OUT}`);
 }

@@ -21,7 +21,8 @@ export class ApiError extends Error {
 
 /**
  * GET from the API during server rendering, forwarding the broker's session cookie.
- * 401 → /login, 404 → the page's not-found UI (another broker's id looks exactly like a missing one).
+ * 401 → /session-ended (clears the cookie, then /login), 403 → ApiError, 404 → not-found UI
+ * (another brokerage's id looks exactly like a missing one).
  */
 export async function apiGet<T>(path: string): Promise<T> {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
@@ -29,7 +30,7 @@ export async function apiGet<T>(path: string): Promise<T> {
     headers: token ? { cookie: `${SESSION_COOKIE}=${token}` } : {},
     cache: "no-store",
   });
-  if (res.status === 401) redirect("/login");
+  if (res.status === 401) redirect("/session-ended");
   if (res.status === 404 || res.status === 400) notFound();
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as { message?: string } | null;

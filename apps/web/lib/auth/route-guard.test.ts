@@ -8,6 +8,8 @@ describe("routeDecision (middleware guard)", () => {
     ["/notes/123", ""],
     ["/clients", ""],
     ["/clients/9", "?tab=notes"],
+    ["/settings/team", ""],
+    ["/settings/audit", "?category=note"],
   ])("redirects signed-out access to %s%s → /login with a relative callbackUrl", (path, search) => {
     const d = routeDecision(path, search, false);
     expect(d.action).toBe("redirect");
