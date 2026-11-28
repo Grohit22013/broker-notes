@@ -29,6 +29,12 @@ export const clientSchema = z.object({
   phone: optionalText(30).refine((v) => !v || /^[0-9+()\-\s]{6,30}$/.test(v), {
     error: "Enter a valid phone number",
   }),
+  /** The adviser looking after this client (a member of the same brokerage), or null. */
+  assignedAdviserId: z
+    .union([z.cuid({ error: "Choose an adviser" }), z.literal("")])
+    .transform((v) => v || null)
+    .nullable()
+    .optional(),
 });
 
 export type ClientInput = z.input<typeof clientSchema>;

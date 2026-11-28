@@ -8,8 +8,22 @@ import type { DocJson } from "./notes/content";
 import type { NoteStatusValue } from "./notes/finalise";
 import type { KeyFigures } from "./notes/key-figures";
 import type { LoanStageValue, NoteTypeValue } from "./notes/taxonomy";
+import type { RoleValue } from "./orgs/roles";
 
-export type AuthUserDto = { id: string; name: string; email: string };
+export type { RoleValue };
+
+/** The signed-in member and their brokerage. */
+export type AuthUserDto = {
+  id: string;
+  name: string;
+  email: string;
+  role: RoleValue;
+  organisationId: string;
+  organisationName: string;
+};
+
+/** A person reference (note author, assigned adviser, audit actor). */
+export type UserRefDto = { id: string; name: string };
 
 /** Error body for every non-2xx response. `field` names the input the message is about, if any. */
 export type ApiErrorBody = { statusCode: number; message: string; field?: string };
@@ -29,6 +43,8 @@ export type NoteMetaFieldsDto = {
 
 export type NoteListItemDto = NoteMetaFieldsDto & {
   id: string;
+  /** Who wrote the note — only they or an admin may change it. */
+  author: UserRefDto;
   title: string;
   contentText: string;
   createdAt: string;
@@ -66,7 +82,13 @@ export type CreatedNoteDto = { id: string };
 export type VersionDto = { id: string; title: string; createdAt: string };
 export type VersionDetailDto = { title: string; contentJson: DocJson };
 
-export type ClientDto = { id: string; name: string; email: string | null; phone: string | null };
+export type ClientDto = {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  assignedAdviser: UserRefDto | null;
+};
 
 export type ClientListItemDto = ClientDto & { noteCount: number; lastNoteAt: string | null };
 
@@ -107,3 +129,56 @@ export type NoteAnalysisDto = {
   redactions: RedactionCounts | null;
   remaining: number;
 };
+
+// ── Organisations, roles & audit (Phase 8) ───────────────────────────────────
+
+export type MemberDto = {
+  id: string;
+  name: string;
+  email: string;
+  role: RoleValue;
+  active: boolean;
+  joinedAt: string;
+};
+
+export type InviteDto = {
+  id: string;
+  email: string;
+  role: RoleValue;
+  createdAt: string;
+  expiresAt: string;
+  invitedBy: string;
+  expired: boolean;
+};
+
+/** Returned once, when the invite is created — the token is never stored or shown again. */
+export type CreatedInviteDto = InviteDto & { token: string };
+
+export type OrganisationDto = {
+  id: string;
+  name: string;
+  members: MemberDto[];
+  /** Pending invites (admins only; empty for other roles). */
+  invites: InviteDto[];
+};
+
+/** What an invite link shows before the invitee registers (public). */
+export type InvitePreviewDto = {
+  organisationName: string;
+  email: string;
+  role: RoleValue;
+  invitedBy: string;
+};
+
+export type AuditEntryDto = {
+  id: string;
+  action: string;
+  summary: string;
+  entityType: string | null;
+  entityId: string | null;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+  user: UserRefDto | null;
+};
+
+export type AuditPageDto = { items: AuditEntryDto[]; nextCursor: string | null };

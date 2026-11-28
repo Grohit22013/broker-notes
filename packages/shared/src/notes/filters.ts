@@ -26,6 +26,7 @@ const filtersSchema = z.object({
   tag: z.preprocess(first, z.string().trim().min(1).max(30).optional().catch(undefined)),
   client: z.preprocess(first, z.cuid().optional().catch(undefined)),
   due: z.preprocess(first, z.literal("1").optional().catch(undefined)).transform((v) => v === "1"),
+  mine: z.preprocess(first, z.literal("1").optional().catch(undefined)).transform((v) => v === "1"),
   sort: z.preprocess(
     first,
     z.enum(["updated", "created", "followup", "title"]).catch(DEFAULT_SORT).default(DEFAULT_SORT),
@@ -43,15 +44,19 @@ export function parseNoteFilters(
     tag: parsed.tag,
     client: parsed.client,
     due: parsed.due,
+    mine: parsed.mine,
     sort: parsed.sort,
   };
 }
 
+/** Who is asking: notes are scoped to their organisation; "mine" narrows to their own. */
+export type NoteScope = { organisationId: string; userId: string };
+
 /**
- * Prisma `where` for a broker's notes. Always scoped to the owner and excludes deleted notes —
- * filters can only ever narrow that set.
+ * Prisma `where` for a brokerage's notes. Always scoped to the organisation and excludes deleted
+ * notes — filters can only ever narrow that set.
  */
-export function buildNoteWhere(userId: string, f: NoteFilters, now: Date = new Date()) {
+export function buildNoteWhere(scope: NoteScope, f: NoteFilters, now: Date = new Date()) {
   const and: object[] = [];
   if (f.q) {
     and.push({
@@ -68,7 +73,13 @@ export function buildNoteWhere(userId: string, f: NoteFilters, now: Date = new D
   if (f.client) and.push({ clientId: f.client });
   if (f.due) and.push({ followUpAt: { lt: startOfNextZonedDay(now) } });
 
-  return { userId, deletedAt: null, ...(and.length ? { AND: and } : {}) };
+  if (f.mine) and.push({ userId: scope.userId });
+
+  return {
+    organisationId: scope.organisationId,
+    deletedAt: null,
+    ...(and.length ? { AND: and } : {}),
+  };
 }
 
 /** Pinned notes always come first, then the chosen sort, then a stable tiebreaker. */
