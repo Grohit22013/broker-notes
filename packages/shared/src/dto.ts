@@ -4,6 +4,7 @@
  */
 import type { Analysis } from "./ai/analysis";
 import type { CaseStageValue, CaseTypeValue } from "./cases/taxonomy";
+import type { TaskPriorityValue, TaskStatusValue } from "./tasks/taxonomy";
 import type { RedactionCounts } from "./ai/redact";
 import type { DocJson } from "./notes/content";
 import type { NoteStatusValue } from "./notes/finalise";
@@ -227,7 +228,11 @@ export type DashboardDto = {
     followUpsDue: number;
     openCases: number;
     myOpenCases: number;
+    myOpenTasks: number;
+    myOverdueTasks: number;
   };
+  /** Open tasks assigned to the signed-in member, soonest due first. */
+  myTasks: TaskDto[];
   pinned: NoteListItemDto[];
   recent: NoteListItemDto[];
   followUps: NoteListItemDto[];
@@ -236,3 +241,28 @@ export type DashboardDto = {
   /** Clients with the most recent note activity. */
   recentClients: (ClientRefDto & { lastNoteAt: string; noteCount: number })[];
 };
+
+// ── Follow-up tasks (Phase 10) ───────────────────────────────────────────────
+
+export type { TaskPriorityValue, TaskStatusValue };
+
+export type TaskDto = {
+  id: string;
+  title: string;
+  description: string | null;
+  status: TaskStatusValue;
+  priority: TaskPriorityValue;
+  /** "YYYY-MM-DD" in the brokerage's time zone. */
+  dueDate: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  assignee: UserRefDto | null;
+  createdBy: UserRefDto;
+  note: { id: string; title: string } | null;
+  client: ClientRefDto | null;
+  case: CaseRefDto | null;
+  /** Whether the signed-in member may change it (creator, assignee or admin). */
+  canChange: boolean;
+};
+
+export type TaskBatchResultDto = { created: number; tasks: TaskDto[] };

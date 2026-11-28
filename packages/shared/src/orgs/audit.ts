@@ -3,6 +3,7 @@ export const AUDIT_CATEGORIES = [
   { value: "note", label: "Notes", prefixes: ["note."] },
   { value: "client", label: "Clients", prefixes: ["client.", "clients."] },
   { value: "case", label: "Cases", prefixes: ["case."] },
+  { value: "task", label: "Tasks", prefixes: ["task."] },
   { value: "team", label: "Team & settings", prefixes: ["member.", "invite.", "organisation."] },
   { value: "export", label: "Exports", prefixes: ["export."] },
   { value: "ai", label: "AI assist", prefixes: ["ai."] },
@@ -38,6 +39,9 @@ export type AuditAction =
   | "case.created"
   | "case.updated"
   | "case.stage_changed"
+  | "task.created"
+  | "task.updated"
+  | "task.status_changed"
   | "export.notes"
   | "export.clients"
   | "ai.analysed";
