@@ -15,7 +15,14 @@ export type AiResult =
 
 type Message = { role: "system" | "user" | "assistant"; content: string };
 type CallResult =
-  { ok: true; content: string; model: string } | { ok: false; error: string; retryable: boolean };
+  | { ok: true; content: string; model: string }
+  | {
+      ok: false;
+      error: string;
+      retryable: boolean;
+      /** The model spent its whole token budget (usually on reasoning) without answering. */
+      outOfRoom?: boolean;
+    };
 
 /**
  * OpenRouter chat client — **free models only**. One request per analysis, with OpenRouter routing
@@ -45,7 +52,13 @@ export class OpenRouterClient {
       { role: "system", content: SYSTEM_PROMPT },
       { role: "user", content: userPrompt },
     ];
-    const first = await this.call(messages, config);
+    let first = await this.call(messages, config);
+    // A reasoning model can "think" past its budget and return nothing. OpenRouter only falls back
+    // on provider errors, so try the next free model ourselves (they don't think first).
+    if (!first.ok && first.outOfRoom && config.models.length > 1) {
+      this.logger.warn("AI ran out of room; retrying with the next free model");
+      first = await this.call(messages, { ...config, models: config.models.slice(1) });
+    }
     if (!first.ok) return first;
     const parsed = parseAnalysis(first.content);
     if (parsed.ok) return { ok: true, analysis: parsed.analysis, model: first.model };
@@ -99,7 +112,7 @@ export class OpenRouterClient {
           temperature: 0.2,
           // Reasoning models "think" before answering: leave room for the JSON, keep thinking short,
           // and don't send the reasoning text back.
-          max_tokens: 3000,
+          max_tokens: 8000,
           reasoning: { effort: "low", exclude: true },
         }),
       });
@@ -142,6 +155,7 @@ export class OpenRouterClient {
           ok: false,
           error: "The AI ran out of room before answering. Please try again.",
           retryable: true,
+          outOfRoom: true,
         };
       }
       if (!content) {

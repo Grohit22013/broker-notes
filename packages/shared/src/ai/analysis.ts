@@ -42,7 +42,11 @@ Rules:
 - Use only information in the note. Never invent figures, names or dates; use null when unknown.
 - Amounts like "$850k" or "1.2m" become numbers (850000, 1200000).
 - For bestInterests, check whether the note records: the client's requirements and objectives, the options/lenders considered and compared (costs, rates, fees), why the recommended product suits the client, and why cheaper or alternative options were not recommended. Flag generic boilerplate. If the note is not about a recommendation (e.g. a first discovery call), say what will need to be recorded later and use "needs_attention" only if something important is missing for its stage.
-- For dates: only include dates the note actually states or clearly implies ("next Tuesday", "end of the month", "in two weeks"); resolve them against Today; never guess. Past dates that are only history (e.g. "settled 14 Nov") are not actions — leave them out. Use [] when there are none.
+- The note text keeps its structure: "## " starts a heading, "- " a bullet, and checklist items start with "[ ]" (still to do) or "[x]" (already done). Only "[ ]" items can be action items; never list "[x]" items.
+- For dates: include every future date or time-frame the note states or clearly implies that the broker may need to act on or track — appointments, call-backs, document or condition deadlines, settlement or purchase targets. Resolve relative dates against Today ("next Tuesday", "in two weeks", "end of the month").
+  - A month or period without a day still counts. "Before March 2027" → the day before (2027-02-28); "by end of March" → the last day of March; "in March" or "March 2027" → the 1st of that month. Say it's a target in the label, e.g. "Target: settle before March 2027".
+  - Use "deadline" for targets and due dates, "follow_up" for call-backs/check-ins, "meeting" for appointments.
+  - Never invent a date the note doesn't support. Past dates that are only history (e.g. "settled 14 Nov") are not actions — leave them out. Don't repeat dates listed under "Already scheduled". Use [] when there are none.
 - Text like "[TFN removed]" marks redacted personal identifiers — ignore them.
 - Write in Australian English.`;
 
@@ -52,6 +56,7 @@ export function buildUserPrompt({
   noteType,
   loanStage,
   today,
+  scheduled,
 }: {
   title: string;
   text: string;
@@ -59,6 +64,8 @@ export function buildUserPrompt({
   loanStage: string | null;
   /** The broker's current date, e.g. "Saturday 2026-11-28" — lets the model resolve "next Tuesday". */
   today?: string;
+  /** Dates already in the note's details, so the model doesn't suggest them again. */
+  scheduled?: { meeting?: string | null; followUp?: string | null };
 }): string {
   const body =
     text.length > AI_MAX_INPUT_CHARS ? `${text.slice(0, AI_MAX_INPUT_CHARS)}\n[…truncated]` : text;
@@ -67,12 +74,70 @@ export function buildUserPrompt({
     `Note title: ${title || "(untitled)"}`,
     `Note type: ${noteType}`,
     `Loan stage: ${loanStage ?? "not set"}`,
+    ...scheduledLines(scheduled),
     "",
     "Note text:",
     '"""',
     body,
     '"""',
   ].join("\n");
+}
+
+function scheduledLines(scheduled?: { meeting?: string | null; followUp?: string | null }) {
+  const items = [
+    scheduled?.meeting ? `meeting ${scheduled.meeting}` : null,
+    scheduled?.followUp ? `follow-up ${scheduled.followUp}` : null,
+  ].filter(Boolean);
+  return items.length ? [`Already scheduled: ${items.join("; ")}`] : [];
+}
+
+type DocNode = {
+  type?: string;
+  text?: string;
+  attrs?: Record<string, unknown>;
+  content?: DocNode[];
+};
+
+/**
+ * The note as text for the AI, keeping the structure plain text loses: headings, bullets and —
+ * crucially — whether each checklist item is still open ("[ ]") or done ("[x]").
+ */
+export function docToAiText(doc: DocNode): string {
+  const inline = (n: DocNode): string =>
+    n.type === "text"
+      ? (n.text ?? "")
+      : n.type === "hardBreak"
+        ? " "
+        : (n.content ?? []).map(inline).join("");
+  const lines: string[] = [];
+  const walk = (n: DocNode, depth: number) => {
+    const pad = "  ".repeat(depth);
+    switch (n.type) {
+      case "heading":
+        lines.push(`## ${inline(n).trim()}`);
+        return;
+      case "paragraph": {
+        const t = inline(n).trim();
+        if (t) lines.push(pad + t);
+        return;
+      }
+      case "taskItem":
+      case "listItem": {
+        const [first, ...rest] = n.content ?? [];
+        const mark = n.type === "taskItem" ? (n.attrs?.checked ? "[x] " : "[ ] ") : "- ";
+        lines.push(`${pad}${mark}${first ? inline(first).trim() : ""}`);
+        rest.forEach((c) => walk(c, depth + 1));
+        return;
+      }
+      case "tableRow":
+        lines.push(pad + "| " + (n.content ?? []).map((c) => inline(c).trim()).join(" | ") + " |");
+        return;
+      default:
+        (n.content ?? []).forEach((c) => walk(c, n.type === "doc" ? depth : depth));
+    }
+  };
+  walk(doc, 0);
+  return lines.join("\n");
 }
 
 // ── Response parsing ──────────────────────────────────────────────────────────
