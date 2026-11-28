@@ -18,15 +18,15 @@ import { Button } from "@/components/ui/button";
 import { finaliseNoteAction } from "@/lib/api/actions";
 
 /**
- * Locks the note as a compliance record. Pending edits are flushed first — server actions run
- * in order, so the finalise call only happens after the last autosave has landed.
+ * Locks the note as a compliance record. Pending edits are saved first (awaited), so the last
+ * autosave can never arrive after the lock and be rejected.
  */
 export function FinaliseButton({
   noteId,
   beforeFinalise,
 }: {
   noteId: string;
-  beforeFinalise: () => void;
+  beforeFinalise: () => Promise<void> | void;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -34,7 +34,7 @@ export function FinaliseButton({
 
   const finalise = () =>
     startTransition(async () => {
-      beforeFinalise();
+      await beforeFinalise();
       const res = await finaliseNoteAction(noteId);
       if (!res.ok) return void toast.error(res.error);
       setOpen(false);

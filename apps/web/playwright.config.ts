@@ -64,6 +64,9 @@ export default defineConfig({
         WEB_ORIGIN: baseURL,
         // Every test registers brokers from the same IP; production keeps the default (10/min).
         AUTH_RATE_LIMIT: "1000",
+        // Deterministic AI provider: no network calls, no free-tier quota used by tests.
+        AI_PROVIDER: "mock",
+        AI_BURST_LIMIT: "1000",
         COOKIE_SECURE: "false",
       },
       reuseExistingServer: !process.env.CI,

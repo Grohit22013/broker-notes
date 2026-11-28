@@ -5,10 +5,12 @@
  */
 import type { ClientInput, ColumnMapping } from "@broker-notes/shared/clients/validation";
 import type {
+  AiStatusDto,
   AmendmentDto,
   ClientDto,
   CreatedNoteDto,
   ImportProblemDto,
+  NoteAnalysisDto,
   NoteMetaDto,
   SavedNoteDto,
   VersionDetailDto,
@@ -163,4 +165,24 @@ export function createNoteFromForm(formData: FormData) {
     ...(typeof templateId === "string" && templateId ? { templateId } : {}),
     ...(typeof clientId === "string" && clientId ? { clientId } : {}),
   });
+}
+
+// ── AI (free OpenRouter models via the API) ──────────────────────────────────
+
+export async function getAiStatus(): Promise<AiStatusDto | null> {
+  const res = await api<AiStatusDto>("GET", "/ai/status");
+  return res.ok ? res.data : null;
+}
+
+export async function getLatestAnalysis(noteId: string): Promise<NoteAnalysisDto | null> {
+  const res = await api<NoteAnalysisDto | null>("GET", `/notes/${noteId}/analysis`);
+  return res.ok ? res.data : null;
+}
+
+export async function analyseNote(
+  noteId: string,
+  force = false,
+): Promise<{ ok: true; result: NoteAnalysisDto } | Fail> {
+  const res = await api<NoteAnalysisDto>("POST", `/notes/${noteId}/analysis`, { force });
+  return res.ok ? { ok: true, result: res.data } : { ok: false, error: res.error };
 }

@@ -24,8 +24,22 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  notes   Note[]
-  clients Client[]
+  notes    Note[]
+  clients  Client[]
+  aiUsages AiUsage[]
+}
+
+/// One row per AI request — used for the per-broker daily limit and basic auditing.
+model AiUsage {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  noteId    String?
+  model     String
+  ok        Boolean
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
 }
 
 /// A broker's client (borrower / household). Notes can be linked to one client.
@@ -48,34 +62,40 @@ model Client {
 
 /// A broker's file note. Rich text is stored as Tiptap JSON; plain text is kept for search/snippets.
 model Note {
-  id          String     @id @default(cuid())
-  userId      String
-  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  title       String     @default("")
+  id           String     @id @default(cuid())
+  userId       String
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title        String     @default("")
   /// Tiptap/ProseMirror document JSON.
-  contentJson Json
+  contentJson  Json
   /// Plain-text projection of contentJson (search + list snippets).
-  contentText String     @default("")
+  contentText  String     @default("")
   /// What kind of file note this is (drives templates and filtering).
-  noteType    NoteType   @default(GENERAL)
+  noteType     NoteType   @default(GENERAL)
   /// Where the client's loan is in the pipeline when this note was written (optional).
-  loanStage   LoanStage?
+  loanStage    LoanStage?
   /// Free-form labels, e.g. "first-home-buyer", "refinance". De-duplicated case-insensitively.
-  tags        String[]   @default([])
+  tags         String[]   @default([])
   /// When the broker needs to follow up (call back, chase documents, review).
-  followUpAt  DateTime?
-  pinned      Boolean    @default(false)
-  clientId    String?
-  client      Client?    @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  followUpAt   DateTime?
+  pinned       Boolean    @default(false)
+  clientId     String?
+  client       Client?    @relation(fields: [clientId], references: [id], onDelete: SetNull)
   /// Key loan figures (loan amount, property value, income, rate, lender) — validated by Zod.
-  keyFigures  Json?
+  keyFigures   Json?
   /// DRAFT notes are editable; FINALISED notes are locked and only accept amendments.
-  status      NoteStatus @default(DRAFT)
-  finalisedAt DateTime?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  status       NoteStatus @default(DRAFT)
+  finalisedAt  DateTime?
+  /// Latest AI analysis (draft suggestions — never applied without the broker's click).
+  aiAnalysis   Json?
+  /// SHA-256 of what was analysed, so an unchanged note reuses the cached result.
+  aiInputHash  String?
+  aiAnalysedAt DateTime?
+  aiModel      String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
   /// Soft delete — file notes are compliance records, so we never hard-delete.
-  deletedAt   DateTime?
+  deletedAt    DateTime?
 
   versions   NoteVersion[]
   amendments NoteAmendment[]

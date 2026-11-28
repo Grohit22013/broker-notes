@@ -33,8 +33,12 @@ export type NoteEditorApi = {
   restore: (title: string, content: DocJson) => void;
   /** True when there are no unsaved changes. */
   isSaved: () => boolean;
-  /** Starts saving any pending changes now (server actions run in order, so a following action sees them). */
-  flush: () => void;
+  /** Starts saving any pending changes now (requests run in order, so a following one sees them). */
+  flush: () => Promise<void>;
+  /** Appends a heading + checklist (e.g. AI action items) to the end of the note. */
+  insertChecklist: (heading: string, items: string[]) => void;
+  /** Appends a heading + paragraph (e.g. an AI summary) to the end of the note. */
+  insertSection: (heading: string, text: string) => void;
 };
 
 type Draft = { title: string; contentJson: DocJson; contentText: string };
@@ -120,10 +124,37 @@ export function NoteEditor({
         setTitle(nextTitle);
         titleValue.current = nextTitle;
         queueSave(nextTitle);
-        flush();
+        void flush();
       },
       isSaved: () => statusRef.current === "saved" || statusRef.current === "idle",
       flush,
+      insertChecklist: (heading, items) => {
+        editor
+          .chain()
+          .focus("end")
+          .insertContent([
+            { type: "heading", attrs: { level: 2 }, content: [{ type: "text", text: heading }] },
+            {
+              type: "taskList",
+              content: items.map((text) => ({
+                type: "taskItem",
+                attrs: { checked: false },
+                content: [{ type: "paragraph", content: [{ type: "text", text }] }],
+              })),
+            },
+          ])
+          .run();
+      },
+      insertSection: (heading, text) => {
+        editor
+          .chain()
+          .focus("end")
+          .insertContent([
+            { type: "heading", attrs: { level: 2 }, content: [{ type: "text", text: heading }] },
+            { type: "paragraph", content: [{ type: "text", text }] },
+          ])
+          .run();
+      },
     });
   }, [editor, onReady, queueSave, flush]);
 
@@ -137,7 +168,7 @@ export function NoteEditor({
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
         e.preventDefault();
-        flush();
+        void flush();
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -174,7 +205,7 @@ export function NoteEditor({
             />
           </div>
           <div className="hidden pr-2 sm:block">
-            <SaveStatusIndicator status={status} error={error} onRetry={flush} />
+            <SaveStatusIndicator status={status} error={error} onRetry={() => void flush()} />
           </div>
         </div>
       </div>
@@ -182,7 +213,7 @@ export function NoteEditor({
       <div className="mx-auto w-full max-w-3xl py-6 md:py-10">
         {readOnly ? null : (
           <div className="mb-2 sm:hidden">
-            <SaveStatusIndicator status={status} error={error} onRetry={flush} />
+            <SaveStatusIndicator status={status} error={error} onRetry={() => void flush()} />
           </div>
         )}
 

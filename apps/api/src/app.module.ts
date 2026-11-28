@@ -3,6 +3,9 @@ import { APP_GUARD } from "@nestjs/core";
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 
+import { AiController } from "./ai/ai.controller";
+import { AiService } from "./ai/ai.service";
+import { OpenRouterClient } from "./ai/openrouter.client";
 import { Public } from "./auth/auth.guard";
 import { AuthModule } from "./auth/auth.module";
 import { ClientsController } from "./clients/clients.controller";
@@ -33,7 +36,19 @@ class HealthController {
     ThrottlerModule.forRoot([{ name: "default", ttl: 60_000, limit: 300 }]),
     AuthModule,
   ],
-  controllers: [HealthController, NotesController, ClientsController, ExportController],
-  providers: [NotesService, ClientsService, { provide: APP_GUARD, useClass: ThrottlerGuard }],
+  controllers: [
+    HealthController,
+    NotesController,
+    ClientsController,
+    ExportController,
+    AiController,
+  ],
+  providers: [
+    NotesService,
+    ClientsService,
+    AiService,
+    OpenRouterClient,
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+  ],
 })
 export class AppModule {}
